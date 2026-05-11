@@ -6,170 +6,67 @@
 <title>Fitness & Longevity Intelligence</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-  .virality-high { background: #dcfce7; color: #166534; }
-  .virality-mid  { background: #fef9c3; color: #854d0e; }
-  .virality-low  { background: #fee2e2; color: #991b1b; }
-  .filter-btn.active { background: #1d4ed8; color: white; }
-  .filter-btn { transition: all 0.15s; }
-  .card { transition: box-shadow 0.15s; }
-  .card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-  .source-reddit   { background:#ff4500; color:white; }
-  .source-substack { background:#ff6719; color:white; }
-  .source-blog     { background:#6366f1; color:white; }
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
+  .virality-high{background:#dcfce7;color:#166534;}
+  .virality-mid{background:#fef9c3;color:#854d0e;}
+  .virality-low{background:#fee2e2;color:#991b1b;}
+  .source-reddit{background:#ff4500;color:white;}
+  .source-substack{background:#ff6719;color:white;}
+  .source-blog{background:#6366f1;color:white;}
+  .card{transition:box-shadow .15s;}
+  .card:hover{box-shadow:0 4px 20px rgba(0,0,0,.1);}
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
-
-<!-- HEADER -->
 <div class="bg-white border-b border-gray-200 sticky top-0 z-10">
   <div class="max-w-2xl mx-auto px-4 py-3">
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-lg font-bold text-gray-900">📊 Fitness Intelligence</h1>
-        <p class="text-xs text-gray-500" id="last-updated">Loading...</p>
+        <p class="text-xs text-gray-500">Last updated: 11 May 2026 — 15:29 UTC</p>
       </div>
-      <div class="text-right">
-        <span class="text-xs text-gray-400" id="item-count"></span>
-      </div>
+      <span class="text-xs text-gray-400" id="cnt"></span>
     </div>
-    <!-- FILTERS -->
     <div class="flex gap-2 mt-3 overflow-x-auto pb-1">
-      <button class="filter-btn active text-sm px-3 py-1.5 rounded-full border border-gray-200 bg-blue-700 text-white font-medium whitespace-nowrap" onclick="filterBy('all')">All</button>
-      <button class="filter-btn text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 font-medium whitespace-nowrap" onclick="filterBy('reddit')">🔥 Reddit</button>
-      <button class="filter-btn text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 font-medium whitespace-nowrap" onclick="filterBy('substack')">📰 Substack</button>
-      <button class="filter-btn text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 font-medium whitespace-nowrap" onclick="filterBy('blog')">📝 Blog</button>
+      <button class="fbtn active text-sm px-3 py-1.5 rounded-full border border-gray-200 bg-blue-700 text-white font-medium whitespace-nowrap" onclick="flt('all',this)">All</button>
+      <button class="fbtn text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 font-medium whitespace-nowrap" onclick="flt('reddit',this)">🔥 Reddit</button>
+      <button class="fbtn text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 font-medium whitespace-nowrap" onclick="flt('substack',this)">📰 Substack</button>
+      <button class="fbtn text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 font-medium whitespace-nowrap" onclick="flt('blog',this)">📝 Blog</button>
     </div>
-    <!-- SORT -->
     <div class="flex gap-2 mt-2">
       <span class="text-xs text-gray-400 self-center">Sort:</span>
-      <button class="sort-btn text-xs px-2.5 py-1 rounded border border-blue-300 bg-blue-50 text-blue-700 font-medium" onclick="sortBy('virality')" id="sort-virality">⚡ Virality</button>
-      <button class="sort-btn text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-500" onclick="sortBy('date')" id="sort-date">🕐 Date</button>
+      <button id="sv" class="text-xs px-2.5 py-1 rounded border border-blue-300 bg-blue-50 text-blue-700 font-medium" onclick="srt('virality')">⚡ Virality</button>
+      <button id="sd" class="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-500" onclick="srt('date')">🕐 Date</button>
     </div>
   </div>
 </div>
-
-<!-- CARDS -->
-<div class="max-w-2xl mx-auto px-4 py-4" id="cards-container"></div>
-
+<div class="max-w-2xl mx-auto px-4 py-4" id="cc"></div>
 <div class="max-w-2xl mx-auto px-4 pb-8 text-center">
   <p class="text-xs text-gray-400">Updated daily at 7:00 AM · WellBeingSm Intelligence</p>
 </div>
-
 <script>
-// ============================================================
-// DATA — replaced daily by scheduled task
-// ============================================================
-const LAST_UPDATED = "11 May 2026 — 07:01 AM (demo)";
-const ITEMS = [{"title": "1 Year of IF: Only 10lbs but incredible body recomp — here's what changed", "url": "https://reddit.com/r/intermittentfasting/comments/example1", "source_type": "reddit", "source_label": "r/intermittentfasting", "virality": 86, "score": 3200, "comments": 284, "date": "2026-05-11T05:30:00Z"}, {"title": "Doctor said to stop eating fruits altogether — what does the science say?", "url": "https://reddit.com/r/Biohackers/comments/example2", "source_type": "reddit", "source_label": "r/Biohackers", "virality": 45, "score": 1100, "comments": 198, "date": "2026-05-11T03:00:00Z"}, {"title": "Psyllium Husk dramatically improved my sleep quality — anyone else?", "url": "https://reddit.com/r/Biohackers/comments/example3", "source_type": "reddit", "source_label": "r/Biohackers", "virality": 39, "score": 890, "comments": 143, "date": "2026-05-10T20:00:00Z"}, {"title": "Your personal superfoods? What's the one thing you swear by?", "url": "https://reddit.com/r/Biohackers/comments/example4", "source_type": "reddit", "source_label": "r/Biohackers", "virality": 39, "score": 760, "comments": 312, "date": "2026-05-10T18:00:00Z"}, {"title": "The Science of Running Economy: Why Your Form Matters More Than Your Volume", "url": "https://runlongrunhealthy.substack.com/p/running-economy", "source_type": "substack", "source_label": "Run Long Run Healthy", "virality": null, "score": null, "comments": null, "date": "2026-05-11T06:00:00Z"}, {"title": "Mitochondrial Health: The Overlooked Key to Athletic Longevity", "url": "https://www.physiologicallyspeaking.com/p/mitochondrial-health", "source_type": "substack", "source_label": "Physiologically Speaking", "virality": null, "score": null, "comments": null, "date": "2026-05-10T14:00:00Z"}, {"title": "GLP-1 Receptor Agonists and Muscle Loss: What the Latest Data Shows", "url": "https://staycuriousmetabolism.substack.com/p/glp1-muscle", "source_type": "substack", "source_label": "Stay Curious Metabolism", "virality": null, "score": null, "comments": null, "date": "2026-05-11T07:00:00Z"}, {"title": "The Link Between Breast Cancer and a Virus in Meat and Dairy", "url": "https://nutritionfacts.org/2026/05/11/breast-cancer-virus-meat-dairy/", "source_type": "blog", "source_label": "NutritionFacts", "virality": null, "score": null, "comments": null, "date": "2026-05-11T08:00:00Z"}, {"title": "Dr. Rhonda Patrick on Sauna, Cold Exposure and Longevity Protocols in 2026", "url": "https://podcast.foundmyfitness.com/episodes/sauna-2026", "source_type": "blog", "source_label": "FoundMyFitness", "virality": null, "score": null, "comments": null, "date": "2026-05-10T10:00:00Z"}];
-// ============================================================
-
-let currentFilter = 'all';
-let currentSort = 'virality';
-
-function viralityClass(v) {
-  if (!v && v !== 0) return '';
-  if (v >= 70) return 'virality-high';
-  if (v >= 40) return 'virality-mid';
-  return 'virality-low';
-}
-
-function viralityBar(v) {
-  if (v === null || v === undefined) return '';
-  const w = Math.min(100, v);
-  const color = v >= 70 ? '#16a34a' : v >= 40 ? '#ca8a04' : '#dc2626';
-  return `<div class="w-full bg-gray-100 rounded-full h-1.5 mt-2">
-    <div style="width:${w}%; background:${color}" class="h-1.5 rounded-full"></div>
-  </div>`;
-}
-
-function formatNum(n) {
-  if (!n) return '0';
-  return n >= 1000 ? (n/1000).toFixed(1).replace(/\.0$/,'') + 'k' : String(n);
-}
-
-function renderCards() {
-  const container = document.getElementById('cards-container');
-  let items = [...ITEMS];
-  
-  if (currentFilter !== 'all') {
-    items = items.filter(i => i.source_type === currentFilter);
-  }
-  
-  if (currentSort === 'virality') {
-    items.sort((a,b) => (b.virality ?? -1) - (a.virality ?? -1));
-  } else {
-    items.sort((a,b) => new Date(b.date) - new Date(a.date));
-  }
-
-  document.getElementById('item-count').textContent = items.length + ' items';
-
-  if (items.length === 0) {
-    container.innerHTML = `<div class="text-center py-12 text-gray-400">
-      <p class="text-4xl mb-2">🔍</p>
-      <p>No content in this category yet.</p>
-    </div>`;
-    return;
-  }
-
-  container.innerHTML = items.map((item, idx) => {
-    const sourceBadge = item.source_type === 'reddit' ? 'source-reddit' :
-                        item.source_type === 'substack' ? 'source-substack' : 'source-blog';
-    const viralBadge = item.virality !== null && item.virality !== undefined
-      ? `<span class="text-xs font-bold px-2 py-0.5 rounded-full ${viralityClass(item.virality)}">⚡ ${item.virality}/100</span>`
-      : '';
-    const engagementRow = item.source_type === 'reddit'
-      ? `<div class="flex items-center gap-3 text-xs text-gray-500 mt-1">
-           <span>⬆️ ${formatNum(item.score)}</span>
-           <span>💬 ${formatNum(item.comments)}</span>
-           ${viralBadge}
-         </div>
-         ${viralityBar(item.virality)}`
-      : `<div class="mt-1">${viralBadge}</div>`;
-
-    return `
-    <div class="card bg-white rounded-xl p-4 mb-3 border border-gray-100 shadow-sm" data-type="${item.source_type}">
-      <div class="flex items-start justify-between gap-2">
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 mb-1.5 flex-wrap">
-            <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${sourceBadge}">${item.source_label}</span>
-          </div>
-          <h3 class="font-semibold text-gray-900 text-sm leading-snug">${item.title}</h3>
-          ${engagementRow}
-        </div>
-        <a href="${item.url}" target="_blank" rel="noopener"
-           class="shrink-0 text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-gray-700 mt-0.5">
-          Read →
-        </a>
-      </div>
-    </div>`;
+const D=[{"title": "1 Year only 10lbs but Body Recomp", "url": "https://reddit.com/r/intermittentfasting/comments/1ta1x5k/1_year_only_10lbs_but_body_recomp/", "source_type": "reddit", "source_label": "r/intermittentfasting", "virality": 64, "score": 664, "comments": 19, "date": "2026-05-11T12:32:13+00:00"}, {"title": "Doctor said to stop eating fruits altogether like completely. Is that normal?", "url": "https://reddit.com/r/Biohackers/comments/1t9qlgi/doctor_said_to_stop_eating_fruits_altogether_like/", "source_type": "reddit", "source_label": "r/Biohackers", "virality": 41, "score": 17, "comments": 177, "date": "2026-05-11T02:43:02+00:00"}, {"title": "Eating carb late at night gives me the BEST sleep", "url": "https://reddit.com/r/Biohackers/comments/1ta0pw9/eating_carb_late_at_night_gives_me_the_best_sleep/", "source_type": "reddit", "source_label": "r/Biohackers", "virality": 39, "score": 83, "comments": 45, "date": "2026-05-11T11:40:11+00:00"}, {"title": "Your personal superfoods?", "url": "https://reddit.com/r/Biohackers/comments/1t9hkwp/your_personal_superfoods/", "source_type": "reddit", "source_label": "r/Biohackers", "virality": 36, "score": 67, "comments": 229, "date": "2026-05-10T20:12:29+00:00"}, {"title": "Psyllium Husk and Sleep Quality", "url": "https://reddit.com/r/Biohackers/comments/1t9yubw/psyllium_husk_and_sleep_quality/", "source_type": "reddit", "source_label": "r/Biohackers", "virality": 32, "score": 130, "comments": 49, "date": "2026-05-11T10:06:18+00:00"}, {"title": "12 Days Out - First Natural Contest", "url": "https://reddit.com/r/bodybuilding/comments/1ta3h67/12_days_out_first_natural_contest/", "source_type": "reddit", "source_label": "r/bodybuilding", "virality": 23, "score": 78, "comments": 10, "date": "2026-05-11T13:34:06+00:00"}, {"title": "Decrease in Daily NEAT", "url": "https://reddit.com/r/xxfitness/comments/1ta60ly/decrease_in_daily_neat/", "source_type": "reddit", "source_label": "r/xxfitness", "virality": 19, "score": 3, "comments": 3, "date": "2026-05-11T15:05:26+00:00"}, {"title": "Cross Fit for 5 months can’t loose weight", "url": "https://reddit.com/r/crossfit/comments/1t9njmz/cross_fit_for_5_months_cant_loose_weight/", "source_type": "reddit", "source_label": "r/crossfit", "virality": 17, "score": 0, "comments": 88, "date": "2026-05-11T00:22:06+00:00"}, {"title": "How Many Carbs Do Runners Actually Need?", "url": "https://runlongrunhealthy.substack.com/p/how-many-carbs-do-runners-actually", "source_type": "substack", "source_label": "Run Long Run Healthy", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "The Sub-2 Marathon, Decoded: A Special Deep-Dive", "url": "https://runlongrunhealthy.substack.com/p/the-sub-2-marathon-decoded-a-special", "source_type": "substack", "source_label": "Run Long Run Healthy", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "Does Your Brain Bonk After a Marathon?", "url": "https://runlongrunhealthy.substack.com/p/does-your-brain-bonk-after-a-marathon", "source_type": "substack", "source_label": "Run Long Run Healthy", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "Physiology Friday #317: Should You Align Your Workout with Your Chronotype?", "url": "https://www.physiologicallyspeaking.com/p/physiology-friday-317-should-you", "source_type": "substack", "source_label": "Physiologically Speaking", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "The Benefits (and Science) of Walking with Weight", "url": "https://www.physiologicallyspeaking.com/p/the-benefits-of-walking-with-weight", "source_type": "substack", "source_label": "Physiologically Speaking", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "Physiology Friday #316: What Happens to Your Brain after a Marathon?", "url": "https://www.physiologicallyspeaking.com/p/physiology-friday-316-what-happens", "source_type": "substack", "source_label": "Physiologically Speaking", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "This 7-Year Experiment Should Have Killed Me", "url": "https://staycuriousmetabolism.substack.com/p/the-7-year-cholesterol-experiment", "source_type": "substack", "source_label": "Stay Curious Metabolism", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "The Peptide That Mimics Exercise… I’m Testing It", "url": "https://staycuriousmetabolism.substack.com/p/mots-c-the-mitochondrial-peptide", "source_type": "substack", "source_label": "Stay Curious Metabolism", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "This Will Change How You See Sugar", "url": "https://staycuriousmetabolism.substack.com/p/this-will-change-how-you-see-sugar", "source_type": "substack", "source_label": "Stay Curious Metabolism", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "Tracking the Singularity: Week of May 4th", "url": "https://metatrends.substack.com/p/tracking-the-singularity-week-of", "source_type": "substack", "source_label": "Metatrends", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "Answering Your Questions (Part 2)", "url": "https://metatrends.substack.com/p/answering-your-questions-part-2", "source_type": "substack", "source_label": "Metatrends", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "Your Brain's Learning Rate", "url": "https://metatrends.substack.com/p/your-brains-learning-rate", "source_type": "substack", "source_label": "Metatrends", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "$1.5 Billion Dollar Collagen Lie", "url": "https://neuroathletics.substack.com/p/15-billion-dollar-collagen-lie", "source_type": "substack", "source_label": "Neuro Athletics", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "How THIS Founder Built a $150M Brand Without Any Funding", "url": "https://neuroathletics.substack.com/p/how-this-founder-built-a-150m-brand", "source_type": "substack", "source_label": "Neuro Athletics", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "Your Wearable is Measuring the Wrong Thing", "url": "https://neuroathletics.substack.com/p/wearables", "source_type": "substack", "source_label": "Neuro Athletics", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "#111 The Optimal Mobility Protocol for a Durable Body | Dr. Kelly Starrett", "url": "https://foundmyfitness.libsyn.com/111-the-optimal-mobility-protocol-for-a-durable-body-dr-kelly-starrett", "source_type": "blog", "source_label": "FoundMyFitness", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "#110 How To Build Lasting Happiness | Dr. Arthur Brooks", "url": "https://foundmyfitness.libsyn.com/110-how-to-build-lasting-happiness-dr-arthur-brooks", "source_type": "blog", "source_label": "FoundMyFitness", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "#109 How To Boost NAD Levels To Fight Inflammation, Improve Recovery, and Slow Aging | Dr. Charles Brenner", "url": "https://foundmyfitness.libsyn.com/109-how-to-boost-nad-levels-to-fight-inflammation-improve-recovery-and-slow-aging-dr-charles-brenner", "source_type": "blog", "source_label": "FoundMyFitness", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "The Link Between Breast Cancer and a Virus in Meat and Dairy", "url": "https://nutritionfacts.org/blog/the-link-between-breast-cancer-and-a-virus-in-meat-and-dairy/", "source_type": "blog", "source_label": "NutritionFacts", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "Could Bovine Leukemia Virus be a Cause of Breast Cancer?", "url": "https://nutritionfacts.org/blog/could-bovine-leukemia-virus-be-a-cause-of-breast-cancer/", "source_type": "blog", "source_label": "NutritionFacts", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}, {"title": "NDMA: A Cancer-Causing Contaminant in Meds and Meat", "url": "https://nutritionfacts.org/blog/ndma-a-cancer-causing-contaminant-in-meds-and-meat/", "source_type": "blog", "source_label": "NutritionFacts", "virality": null, "score": null, "comments": null, "date": "2026-05-11T15:29:03.974151+00:00"}];
+let cf='all',cs='virality';
+const vc=v=>v==null?'':v>=70?'virality-high':v>=40?'virality-mid':'virality-low';
+const fn=n=>!n?'0':n>=1000?(n/1000).toFixed(1).replace(/\.0$/,'')+'k':String(n);
+function render(){
+  let items=[...D];
+  if(cf!=='all')items=items.filter(i=>i.source_type===cf);
+  cs==='virality'?items.sort((a,b)=>(b.virality??-1)-(a.virality??-1)):items.sort((a,b)=>new Date(b.date)-new Date(a.date));
+  document.getElementById('cnt').textContent=items.length+' items';
+  const cc=document.getElementById('cc');
+  if(!items.length){cc.innerHTML='<div class="text-center py-12 text-gray-400"><p class="text-4xl mb-2">🔍</p><p>No content in this category.</p></div>';return;}
+  cc.innerHTML=items.map(item=>{
+    const sb='source-'+item.source_type;
+    const vb=item.virality!=null?`<span class="text-xs font-bold px-2 py-0.5 rounded-full ${vc(item.virality)}">⚡ ${item.virality}/100</span>`:'';
+    const bar=item.virality!=null?`<div class="w-full bg-gray-100 rounded-full h-1.5 mt-2"><div style="width:${Math.min(100,item.virality)}%;background:${item.virality>=70?'#16a34a':item.virality>=40?'#ca8a04':'#dc2626'}" class="h-1.5 rounded-full"></div></div>`:'';
+    const eng=item.source_type==='reddit'?`<div class="flex items-center gap-3 text-xs text-gray-500 mt-1"><span>⬆️ ${fn(item.score)}</span><span>💬 ${fn(item.comments)}</span>${vb}</div>${bar}`:`<div class="mt-1">${vb}</div>`;
+    return`<div class="card bg-white rounded-xl p-4 mb-3 border border-gray-100 shadow-sm"><div class="flex items-start justify-between gap-2"><div class="flex-1 min-w-0"><div class="flex items-center gap-2 mb-1.5"><span class="text-xs font-semibold px-2 py-0.5 rounded-full ${sb}">${item.source_label}</span></div><h3 class="font-semibold text-gray-900 text-sm leading-snug">${item.title}</h3>${eng}</div><a href="${item.url}" target="_blank" rel="noopener" class="shrink-0 text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-gray-700 mt-0.5 ml-2">Read →</a></div></div>`;
   }).join('');
 }
-
-function filterBy(type) {
-  currentFilter = type;
-  document.querySelectorAll('.filter-btn').forEach(b => {
-    b.classList.remove('active','bg-blue-700','text-white');
-    b.classList.add('text-gray-600');
-  });
-  event.target.classList.add('active','bg-blue-700','text-white');
-  event.target.classList.remove('text-gray-600');
-  renderCards();
-}
-
-function sortBy(type) {
-  currentSort = type;
-  document.getElementById('sort-virality').className = type === 'virality'
-    ? 'sort-btn text-xs px-2.5 py-1 rounded border border-blue-300 bg-blue-50 text-blue-700 font-medium'
-    : 'sort-btn text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-500';
-  document.getElementById('sort-date').className = type === 'date'
-    ? 'sort-btn text-xs px-2.5 py-1 rounded border border-blue-300 bg-blue-50 text-blue-700 font-medium'
-    : 'sort-btn text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-500';
-  renderCards();
-}
-
-document.getElementById('last-updated').textContent = 'Last updated: ' + LAST_UPDATED;
-renderCards();
+function flt(t,btn){cf=t;document.querySelectorAll('.fbtn').forEach(b=>{b.classList.remove('bg-blue-700','text-white');b.classList.add('text-gray-600');});btn.classList.add('bg-blue-700','text-white');btn.classList.remove('text-gray-600');render();}
+function srt(t){cs=t;document.getElementById('sv').className=`text-xs px-2.5 py-1 rounded border font-medium ${t==='virality'?'border-blue-300 bg-blue-50 text-blue-700':'border-gray-200 text-gray-500'}`;document.getElementById('sd').className=`text-xs px-2.5 py-1 rounded border font-medium ${t==='date'?'border-blue-300 bg-blue-50 text-blue-700':'border-gray-200 text-gray-500'}`;render();}
+render();
 </script>
 </body>
 </html>
