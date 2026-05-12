@@ -1,0 +1,25 @@
+name: Daily Fitness Intelligence Report
+
+on:
+  schedule:
+    - cron: '0 5 * * *'   # 07:00 CEST (UTC+2) = 05:00 UTC
+  workflow_dispatch:        # permette avvio manuale dal pannello GitHub
+
+jobs:
+  run-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run report
+        env:
+          TG_TOKEN:   ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          GH_TOKEN:   ${{ secrets.GH_TOKEN }}
+        run: python run.py
