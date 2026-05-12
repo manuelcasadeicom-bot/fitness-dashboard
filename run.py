@@ -237,7 +237,7 @@ function render(){
     const sb='source-'+item.source_type;
     const vb=item.virality!=null?`<span class="text-xs font-bold px-2 py-0.5 rounded-full ${vc(item.virality)}">⚡ ${item.virality}/100</span>`:'';
     const bar=item.virality!=null?`<div class="w-full bg-gray-100 rounded-full h-1.5 mt-2"><div style="width:${Math.min(100,item.virality)}%;background:${item.virality>=70?'#16a34a':item.virality>=40?'#ca8a04':'#dc2626'}" class="h-1.5 rounded-full"></div></div>`:'';
-    const eng=item.source_type==='reddit'?`<div class="flex items-center gap-3 text-xs text-gray-500 mt-1"><span>⬆️ ${fn(item.score)}</span><span>💬 ${fn(item.comments)}</span>${vb}</div>${bar}`:`<div class="mt-1">${vb}</div>`;
+    const eng=(item.source_type==='reddit'&&item.score!=null)?`<div class="flex items-center gap-3 text-xs text-gray-500 mt-1"><span>⬆️ ${fn(item.score)}</span><span>💬 ${fn(item.comments)}</span>${vb}</div>${bar}`:`<div class="mt-1">${vb}</div>`;
     return`<div class="card bg-white rounded-xl p-4 mb-3 border border-gray-100 shadow-sm"><div class="flex items-start justify-between gap-2"><div class="flex-1 min-w-0"><div class="flex items-center gap-2 mb-1.5"><span class="text-xs font-semibold px-2 py-0.5 rounded-full ${sb}">${item.source_label}</span></div><h3 class="font-semibold text-gray-900 text-sm leading-snug">${item.title}</h3>${eng}</div><a href="${item.url}" target="_blank" rel="noopener" class="shrink-0 text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-gray-700 mt-0.5 ml-2">Read →</a></div></div>`;
   }).join('');
 }
