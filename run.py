@@ -67,10 +67,44 @@ def virality(score, comments, created_utc):
     return min(100, int((score + comments * 15) / max(hours_old, 0.5) / 5))
 
 # ── REDDIT ────────────────────────────────────────────────────────────────────
+def fetch_reddit_rss(sub):
+    """Fetch subreddit via RSS (more permissive than JSON API on cloud IPs)."""
+    ns = {"media": "http://search.yahoo.com/mrss/"}
+    raw = curl_get(f"https://www.reddit.com/r/{sub}/top/.rss?sort=top&t=day&limit=15")
+    if not raw or "<html" in raw[:200].lower():
+        return []
+    root = ET.fromstring(raw)
+    items = []
+    for entry in root.findall("{http://www.w3.org/2005/Atom}entry"):
+        title_el   = entry.find("{http://www.w3.org/2005/Atom}title")
+        link_el    = entry.find("{http://www.w3.org/2005/Atom}link")
+        updated_el = entry.find("{http://www.w3.org/2005/Atom}updated")
+        title = (title_el.text or "").strip()[:120] if title_el is not None else ""
+        url   = link_el.get("href", "") if link_el is not None else ""
+        date_str = (updated_el.text or "").strip() if updated_el is not None else ""
+        dt = parse_date(date_str)
+        if not dt or dt < CUTOFF:
+            continue
+        # RSS doesn't include score/comments — use recency as proxy
+        hours_old = (NOW.timestamp() - dt.timestamp()) / 3600
+        v = max(1, int(50 / max(hours_old, 0.5)))
+        items.append({
+            "title":        title,
+            "url":          url,
+            "source_type":  "reddit",
+            "source_label": f"r/{sub}",
+            "virality":     v,
+            "score":        None,
+            "comments":     None,
+            "date":         dt.isoformat(),
+        })
+    return items
+
 def fetch_reddit():
     items = []
     for sub in REDDIT_SUBS:
         try:
+            # Try JSON API first (works on local/non-datacenter IPs)
             raw  = curl_get(f"https://www.reddit.com/r/{sub}/top.json?sort=top&t=day&limit=15",
                             extra_headers={"Accept": "application/json"})
             data = json.loads(raw)
@@ -91,8 +125,12 @@ def fetch_reddit():
                     "comments":     comments,
                     "date":         datetime.fromtimestamp(created, tz=timezone.utc).isoformat(),
                 })
-        except Exception as e:
-            print(f"  Reddit r/{sub}: {e}")
+        except Exception:
+            # Fallback to RSS (works better on cloud IPs)
+            try:
+                items.extend(fetch_reddit_rss(sub))
+            except Exception as e:
+                print(f"  Reddit r/{sub}: {e}")
     items.sort(key=lambda x: x["virality"], reverse=True)
     return items[:8]
 
@@ -238,23 +276,28 @@ def upload_to_github(html):
 
 # ── TELEGRAM ──────────────────────────────────────────────────────────────────
 def send_telegram(all_items):
-    top3 = sorted([i for i in all_items if i["virality"] is not None],
-                  key=lambda x: x["virality"], reverse=True)[:3]
+    # Top 3 with virality (Reddit JSON); fallback to most recent if unavailable
+    scored = [i for i in all_items if i["virality"] is not None]
+    top3 = sorted(scored, key=lambda x: x["virality"], reverse=True)[:3]
+    fallback = not top3
+
+    if fallback:
+        # Reddit blocked on cloud IP — use most recent items from any source
+        top3 = sorted(all_items, key=lambda x: x["date"], reverse=True)[:3]
+
     lines = [
         "📊 FITNESS & LONGEVITY INTELLIGENCE",
         f"📅 {NOW.strftime('%d %b %Y')} — 07:00 AM",
         "",
-        "🏆 TOP 3 TODAY",
+        "🏆 TOP 3 TODAY" + (" (by recency)" if fallback else ""),
         "━━━━━━━━━━━━━━",
     ]
     for i, item in enumerate(top3, 1):
         t = item["title"][:75] + ("…" if len(item["title"]) > 75 else "")
-        lines += [
-            f"{i}. [{item['source_label']}] {t}",
-            f"   ⬆️ {fmt_num(item['score'])}  💬 {fmt_num(item['comments'])}  ⚡ {item['virality']}/100",
-            f"   {item['url']}",
-            "",
-        ]
+        lines.append(f"{i}. [{item['source_label']}] {t}")
+        if item["score"] is not None:
+            lines.append(f"   ⬆️ {fmt_num(item['score'])}  💬 {fmt_num(item['comments'])}  ⚡ {item['virality']}/100")
+        lines += [f"   {item['url']}", ""]
     lines += ["━━━━━━━━━━━━━━", f"📲 Full dashboard: {DASHBOARD_URL}"]
     msg = "\n".join(lines)
     result = subprocess.run([
