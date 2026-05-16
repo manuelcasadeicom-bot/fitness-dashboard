@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Daily Fitness & Longevity Intelligence Dashboard generator — GitHub Actions version."""
+"""Daily Fitness & Longevity Intelligence Dashboard generator."""
 
 import json, base64, urllib.request, subprocess, os
 from datetime import datetime, timezone, timedelta
 from xml.etree import ElementTree as ET
 
-# ── CREDENTIALS (from GitHub Secrets, set as env vars) ───────────────────────
+# ── CREDENTIALS ───────────────────────────────────────────────────────────────
 TG_TOKEN      = os.environ["TG_TOKEN"]
 TG_CHAT_ID    = os.environ["TG_CHAT_ID"]
 GH_TOKEN      = os.environ["GH_TOKEN"]
@@ -67,44 +67,10 @@ def virality(score, comments, created_utc):
     return min(100, int((score + comments * 15) / max(hours_old, 0.5) / 5))
 
 # ── REDDIT ────────────────────────────────────────────────────────────────────
-def fetch_reddit_rss(sub):
-    """Fetch subreddit via RSS (more permissive than JSON API on cloud IPs)."""
-    ns = {"media": "http://search.yahoo.com/mrss/"}
-    raw = curl_get(f"https://www.reddit.com/r/{sub}/top/.rss?sort=top&t=day&limit=15")
-    if not raw or "<html" in raw[:200].lower():
-        return []
-    root = ET.fromstring(raw)
-    items = []
-    for entry in root.findall("{http://www.w3.org/2005/Atom}entry"):
-        title_el   = entry.find("{http://www.w3.org/2005/Atom}title")
-        link_el    = entry.find("{http://www.w3.org/2005/Atom}link")
-        updated_el = entry.find("{http://www.w3.org/2005/Atom}updated")
-        title = (title_el.text or "").strip()[:120] if title_el is not None else ""
-        url   = link_el.get("href", "") if link_el is not None else ""
-        date_str = (updated_el.text or "").strip() if updated_el is not None else ""
-        dt = parse_date(date_str)
-        if not dt or dt < CUTOFF:
-            continue
-        # RSS doesn't include score/comments — use recency as proxy
-        hours_old = (NOW.timestamp() - dt.timestamp()) / 3600
-        v = max(1, int(50 / max(hours_old, 0.5)))
-        items.append({
-            "title":        title,
-            "url":          url,
-            "source_type":  "reddit",
-            "source_label": f"r/{sub}",
-            "virality":     v,
-            "score":        None,
-            "comments":     None,
-            "date":         dt.isoformat(),
-        })
-    return items
-
 def fetch_reddit():
     items = []
     for sub in REDDIT_SUBS:
         try:
-            # Try JSON API first (works on local/non-datacenter IPs)
             raw  = curl_get(f"https://www.reddit.com/r/{sub}/top.json?sort=top&t=day&limit=15",
                             extra_headers={"Accept": "application/json"})
             data = json.loads(raw)
@@ -125,12 +91,8 @@ def fetch_reddit():
                     "comments":     comments,
                     "date":         datetime.fromtimestamp(created, tz=timezone.utc).isoformat(),
                 })
-        except Exception:
-            # Fallback to RSS (works better on cloud IPs)
-            try:
-                items.extend(fetch_reddit_rss(sub))
-            except Exception as e:
-                print(f"  Reddit r/{sub}: {e}")
+        except Exception as e:
+            print(f"  Reddit r/{sub}: {e}")
     items.sort(key=lambda x: x["virality"], reverse=True)
     return items[:8]
 
@@ -237,7 +199,7 @@ function render(){
     const sb='source-'+item.source_type;
     const vb=item.virality!=null?`<span class="text-xs font-bold px-2 py-0.5 rounded-full ${vc(item.virality)}">⚡ ${item.virality}/100</span>`:'';
     const bar=item.virality!=null?`<div class="w-full bg-gray-100 rounded-full h-1.5 mt-2"><div style="width:${Math.min(100,item.virality)}%;background:${item.virality>=70?'#16a34a':item.virality>=40?'#ca8a04':'#dc2626'}" class="h-1.5 rounded-full"></div></div>`:'';
-    const eng=(item.source_type==='reddit'&&item.score!=null)?`<div class="flex items-center gap-3 text-xs text-gray-500 mt-1"><span>⬆️ ${fn(item.score)}</span><span>💬 ${fn(item.comments)}</span>${vb}</div>${bar}`:`<div class="mt-1">${vb}</div>`;
+    const eng=item.source_type==='reddit'?`<div class="flex items-center gap-3 text-xs text-gray-500 mt-1"><span>⬆️ ${fn(item.score)}</span><span>💬 ${fn(item.comments)}</span>${vb}</div>${bar}`:`<div class="mt-1">${vb}</div>`;
     return`<div class="card bg-white rounded-xl p-4 mb-3 border border-gray-100 shadow-sm"><div class="flex items-start justify-between gap-2"><div class="flex-1 min-w-0"><div class="flex items-center gap-2 mb-1.5"><span class="text-xs font-semibold px-2 py-0.5 rounded-full ${sb}">${item.source_label}</span></div><h3 class="font-semibold text-gray-900 text-sm leading-snug">${item.title}</h3>${eng}</div><a href="${item.url}" target="_blank" rel="noopener" class="shrink-0 text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-gray-700 mt-0.5 ml-2">Read →</a></div></div>`;
   }).join('');
 }
@@ -276,28 +238,23 @@ def upload_to_github(html):
 
 # ── TELEGRAM ──────────────────────────────────────────────────────────────────
 def send_telegram(all_items):
-    # Top 3 with virality (Reddit JSON); fallback to most recent if unavailable
-    scored = [i for i in all_items if i["virality"] is not None]
-    top3 = sorted(scored, key=lambda x: x["virality"], reverse=True)[:3]
-    fallback = not top3
-
-    if fallback:
-        # Reddit blocked on cloud IP — use most recent items from any source
-        top3 = sorted(all_items, key=lambda x: x["date"], reverse=True)[:3]
-
+    top3 = sorted([i for i in all_items if i["virality"] is not None],
+                  key=lambda x: x["virality"], reverse=True)[:3]
     lines = [
         "📊 FITNESS & LONGEVITY INTELLIGENCE",
         f"📅 {NOW.strftime('%d %b %Y')} — 07:00 AM",
         "",
-        "🏆 TOP 3 TODAY" + (" (by recency)" if fallback else ""),
+        "🏆 TOP 3 TODAY",
         "━━━━━━━━━━━━━━",
     ]
     for i, item in enumerate(top3, 1):
         t = item["title"][:75] + ("…" if len(item["title"]) > 75 else "")
-        lines.append(f"{i}. [{item['source_label']}] {t}")
-        if item["score"] is not None:
-            lines.append(f"   ⬆️ {fmt_num(item['score'])}  💬 {fmt_num(item['comments'])}  ⚡ {item['virality']}/100")
-        lines += [f"   {item['url']}", ""]
+        lines += [
+            f"{i}. [{item['source_label']}] {t}",
+            f"   ⬆️ {fmt_num(item['score'])}  💬 {fmt_num(item['comments'])}  ⚡ {item['virality']}/100",
+            f"   {item['url']}",
+            "",
+        ]
     lines += ["━━━━━━━━━━━━━━", f"📲 Full dashboard: {DASHBOARD_URL}"]
     msg = "\n".join(lines)
     result = subprocess.run([
