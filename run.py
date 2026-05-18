@@ -67,12 +67,13 @@ def virality(score, comments, created_utc):
     return min(100, int((score + comments * 15) / max(hours_old, 0.5) / 5))
 
 # ── REDDIT ────────────────────────────────────────────────────────────────────
+REDDIT_PROXY = "https://reddit-proxy.manuelcasadei-com.workers.dev"
+
 def fetch_reddit():
     items = []
     for sub in REDDIT_SUBS:
         try:
-            raw  = curl_get(f"https://www.reddit.com/r/{sub}/top.json?sort=top&t=day&limit=15",
-                            extra_headers={"Accept": "application/json"})
+            raw  = curl_get(f"{REDDIT_PROXY}/{sub}")
             data = json.loads(raw)
             for p in data.get("data", {}).get("children", []):
                 d = p.get("data", {})
