@@ -70,30 +70,32 @@ def virality(score, comments, created_utc):
 REDDIT_PROXY = "https://reddit-proxy.manuelcasadei-com.workers.dev"
 
 def fetch_reddit():
+    # Una sola chiamata combinata per tutti i subreddit → evita rate limit
+    combined = "+".join(REDDIT_SUBS)
     items = []
-    for sub in REDDIT_SUBS:
-        try:
-            raw  = curl_get(f"{REDDIT_PROXY}/{sub}")
-            data = json.loads(raw)
-            for p in data.get("data", {}).get("children", []):
-                d = p.get("data", {})
-                created = d.get("created_utc", 0)
-                if (NOW.timestamp() - created) / 3600 > 48:
-                    continue
-                score    = d.get("score", 0)
-                comments = d.get("num_comments", 0)
-                items.append({
-                    "title":        d.get("title", "")[:120],
-                    "url":          "https://reddit.com" + d.get("permalink", ""),
-                    "source_type":  "reddit",
-                    "source_label": f"r/{sub}",
-                    "virality":     virality(score, comments, created),
-                    "score":        score,
-                    "comments":     comments,
-                    "date":         datetime.fromtimestamp(created, tz=timezone.utc).isoformat(),
-                })
-        except Exception as e:
-            print(f"  Reddit r/{sub}: {e}")
+    try:
+        raw  = curl_get(f"{REDDIT_PROXY}/{combined}")
+        data = json.loads(raw)
+        for p in data.get("data", {}).get("children", []):
+            d = p.get("data", {})
+            created = d.get("created_utc", 0)
+            if (NOW.timestamp() - created) / 3600 > 48:
+                continue
+            score    = d.get("score", 0)
+            comments = d.get("num_comments", 0)
+            sub      = d.get("subreddit", "")
+            items.append({
+                "title":        d.get("title", "")[:120],
+                "url":          "https://reddit.com" + d.get("permalink", ""),
+                "source_type":  "reddit",
+                "source_label": f"r/{sub}",
+                "virality":     virality(score, comments, created),
+                "score":        score,
+                "comments":     comments,
+                "date":         datetime.fromtimestamp(created, tz=timezone.utc).isoformat(),
+            })
+    except Exception as e:
+        print(f"  Reddit combined: {e}")
     items.sort(key=lambda x: x["virality"], reverse=True)
     return items[:8]
 
