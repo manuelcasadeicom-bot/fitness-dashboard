@@ -32,6 +32,8 @@ BLOG_FEEDS = [
     ("https://theproof.com/feed/",                  "The Proof"),
 ]
 
+ECONOMIST_FEED = "https://www.economist.com/latest/rss.xml"
+
 UA     = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 NOW    = datetime.now(timezone.utc)
 CUTOFF = NOW - timedelta(hours=48)
@@ -139,6 +141,39 @@ def fetch_rss(feeds, source_type):
             print(f"  RSS {name}: {e}")
     return items
 
+# ── ECONOMIST ─────────────────────────────────────────────────────────────────
+def fetch_economist():
+    items = []
+    ns = {"atom": "http://www.w3.org/2005/Atom"}
+    try:
+        raw  = curl_get(ECONOMIST_FEED)
+        root = ET.fromstring(raw)
+        channel = root.find("channel")
+        entries = channel.findall("item") if channel else []
+        for entry in entries[:5]:
+            title_el = entry.find("title")
+            link_el  = entry.find("link")
+            desc_el  = entry.find("description")
+            date_el  = entry.find("pubDate")
+            title = (title_el.text or "").strip()[:120] if title_el is not None else ""
+            link  = (link_el.text or "").strip() if link_el is not None else ""
+            desc  = (desc_el.text or "").strip()[:200] if desc_el is not None else ""
+            dt    = parse_date((date_el.text or "").strip() if date_el is not None else "")
+            items.append({
+                "title":        title,
+                "url":          link,
+                "source_type":  "economist",
+                "source_label": "The Economist",
+                "description":  desc,
+                "virality":     None,
+                "score":        None,
+                "comments":     None,
+                "date":         dt.isoformat() if dt else NOW.isoformat(),
+            })
+    except Exception as e:
+        print(f"  Economist: {e}")
+    return items
+
 # ── HTML ──────────────────────────────────────────────────────────────────────
 HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -155,6 +190,7 @@ HTML = r"""<!DOCTYPE html>
   .source-reddit{background:#ff4500;color:white;}
   .source-substack{background:#ff6719;color:white;}
   .source-blog{background:#6366f1;color:white;}
+  .source-economist{background:#B22222;color:white;}
   .card{transition:box-shadow .15s;}
   .card:hover{box-shadow:0 4px 20px rgba(0,0,0,.1);}
 </style>
@@ -174,6 +210,7 @@ HTML = r"""<!DOCTYPE html>
       <button class="fbtn text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 font-medium whitespace-nowrap" onclick="flt('reddit',this)">🔥 Reddit</button>
       <button class="fbtn text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 font-medium whitespace-nowrap" onclick="flt('substack',this)">📰 Substack</button>
       <button class="fbtn text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 font-medium whitespace-nowrap" onclick="flt('blog',this)">📝 Blog</button>
+      <button class="fbtn text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 font-medium whitespace-nowrap" onclick="flt('economist',this)">🗞️ Economist</button>
     </div>
     <div class="flex gap-2 mt-2">
       <span class="text-xs text-gray-400 self-center">Sort:</span>
@@ -283,7 +320,11 @@ if __name__ == "__main__":
     blogs = fetch_rss(BLOG_FEEDS, "blog")
     print(f"  {len(blogs)} posts")
 
-    all_items = reddit + substack + blogs
+    print("Fetching Economist...")
+    economist = fetch_economist()
+    print(f"  {len(economist)} articles")
+
+    all_items = reddit + substack + blogs + economist
     print(f"Total: {len(all_items)} items")
 
     date_str = NOW.strftime("%d %b %Y — %H:%M UTC")
