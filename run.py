@@ -32,7 +32,11 @@ BLOG_FEEDS = [
     ("https://theproof.com/feed/",                  "The Proof"),
 ]
 
-ECONOMIST_FEED = "https://www.economist.com/latest/rss.xml"
+ECONOMIST_FEEDS = [
+    ("https://www.economist.com/leaders/rss.xml",               "Leaders"),
+    ("https://www.economist.com/finance-and-economics/rss.xml", "Finance"),
+    ("https://www.economist.com/science-and-technology/rss.xml","Science"),
+]
 
 UA     = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 NOW    = datetime.now(timezone.utc)
@@ -144,34 +148,38 @@ def fetch_rss(feeds, source_type):
 # ── ECONOMIST ─────────────────────────────────────────────────────────────────
 def fetch_economist():
     items = []
-    ns = {"atom": "http://www.w3.org/2005/Atom"}
-    try:
-        raw  = curl_get(ECONOMIST_FEED)
-        root = ET.fromstring(raw)
-        channel = root.find("channel")
-        entries = channel.findall("item") if channel else []
-        for entry in entries[:5]:
-            title_el = entry.find("title")
-            link_el  = entry.find("link")
-            desc_el  = entry.find("description")
-            date_el  = entry.find("pubDate")
-            title = (title_el.text or "").strip()[:120] if title_el is not None else ""
-            link  = (link_el.text or "").strip() if link_el is not None else ""
-            desc  = (desc_el.text or "").strip()[:200] if desc_el is not None else ""
-            dt    = parse_date((date_el.text or "").strip() if date_el is not None else "")
-            items.append({
-                "title":        title,
-                "url":          link,
-                "source_type":  "economist",
-                "source_label": "The Economist",
-                "description":  desc,
-                "virality":     None,
-                "score":        None,
-                "comments":     None,
-                "date":         dt.isoformat() if dt else NOW.isoformat(),
-            })
-    except Exception as e:
-        print(f"  Economist: {e}")
+    for url, section in ECONOMIST_FEEDS:
+        try:
+            raw     = curl_get(url)
+            root    = ET.fromstring(raw)
+            channel = root.find("channel")
+            entries = channel.findall("item") if channel else []
+            count   = 0
+            for entry in entries:
+                if count >= 3:
+                    break
+                title_el = entry.find("title")
+                link_el  = entry.find("link")
+                desc_el  = entry.find("description")
+                date_el  = entry.find("pubDate")
+                title = (title_el.text or "").strip()[:120] if title_el is not None else ""
+                link  = (link_el.text or "").strip() if link_el is not None else ""
+                desc  = (desc_el.text or "").strip()[:200] if desc_el is not None else ""
+                dt    = parse_date((date_el.text or "").strip() if date_el is not None else "")
+                items.append({
+                    "title":        title,
+                    "url":          link,
+                    "source_type":  "economist",
+                    "source_label": f"Economist · {section}",
+                    "description":  desc,
+                    "virality":     None,
+                    "score":        None,
+                    "comments":     None,
+                    "date":         dt.isoformat() if dt else NOW.isoformat(),
+                })
+                count += 1
+        except Exception as e:
+            print(f"  Economist {section}: {e}")
     return items
 
 # ── HTML ──────────────────────────────────────────────────────────────────────
