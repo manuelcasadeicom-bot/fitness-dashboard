@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Daily Fitness & Longevity Intelligence Dashboard generator."""
+"""Daily Fitness Intelligence & Economics Dashboard generator."""
 
 import json, base64, urllib.request, subprocess, os
 from datetime import datetime, timezone, timedelta
@@ -180,7 +180,7 @@ HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fitness & Longevity Intelligence</title>
+<title>Fitness Intelligence & Economics</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
@@ -200,7 +200,7 @@ HTML = r"""<!DOCTYPE html>
   <div class="max-w-2xl mx-auto px-4 py-3">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-lg font-bold text-gray-900">📊 Fitness Intelligence</h1>
+        <h1 class="text-lg font-bold text-gray-900">📊 Fitness Intelligence & Economics</h1>
         <p class="text-xs text-gray-500">Last updated: __DATE__</p>
       </div>
       <span class="text-xs text-gray-400" id="cnt"></span>
