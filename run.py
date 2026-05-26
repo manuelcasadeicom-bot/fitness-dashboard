@@ -20,7 +20,6 @@ REDDIT_SUBS = [
 
 SUBSTACK_FEEDS = [
     ("https://runlongrunhealthy.substack.com/feed",       "Run Long Run Healthy"),
-    ("https://www.physiologicallyspeaking.com/feed",      "Physiologically Speaking"),
     ("https://staycuriousmetabolism.substack.com/feed",   "Stay Curious Metabolism"),
     ("https://metatrends.substack.com/feed",              "Metatrends"),
     ("https://neuroathletics.substack.com/feed",          "Neuro Athletics"),
