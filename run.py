@@ -110,7 +110,9 @@ def fetch_rss(feeds, source_type):
     ns = {"atom": "http://www.w3.org/2005/Atom"}
     for url, name in feeds:
         try:
-            raw  = curl_get(url)
+            # Passa attraverso il Worker per bypassare il blocco IP di GitHub Actions
+            proxy_url = f"{REDDIT_PROXY}?url={url}"
+            raw  = curl_get(proxy_url)
             root = ET.fromstring(raw)
             channel  = root.find("channel")
             entries  = channel.findall("item") if channel else root.findall("atom:entry", ns)
@@ -148,7 +150,8 @@ def fetch_economist():
     items = []
     for url, section in ECONOMIST_FEEDS:
         try:
-            raw     = curl_get(url)
+            proxy_url = f"{REDDIT_PROXY}?url={url}"
+            raw     = curl_get(proxy_url)
             root    = ET.fromstring(raw)
             channel = root.find("channel")
             entries = channel.findall("item") if channel else []
