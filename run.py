@@ -128,8 +128,7 @@ def fetch_rss(feeds, source_type):
                 else:
                     link = ""
                 dt = parse_date((date_el.text or "").strip() if date_el is not None else "")
-                if dt and dt < CUTOFF:
-                    continue
+                # Nessun cutoff per RSS: mostra sempre i 3 più recenti indipendentemente dall'età
                 items.append({
                     "title":        title,
                     "url":          link,
