@@ -64,7 +64,7 @@ def fetch_reddit():
     url = f"https://www.reddit.com/r/{combined}/top/.rss?t=day&limit=30"
     items = []
     try:
-        raw  = curl_get(f"{PROXY}?url={url.replace('?','%3F').replace('&','%26')}")
+        raw  = curl_get(f"{PROXY}?url={url.replace('+','%2B').replace('?','%3F').replace('&','%26')}")
         ns   = {"atom": "http://www.w3.org/2005/Atom"}
         root = ET.fromstring(raw)
         count = 0
