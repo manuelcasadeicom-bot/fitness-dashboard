@@ -64,7 +64,7 @@ def fetch_reddit():
     url = f"https://www.reddit.com/r/{combined}/top/.rss?t=day&limit=30"
     items = []
     try:
-        raw  = curl_get(f"{PROXY}?url={url}")
+        raw  = curl_get(f"{PROXY}?url={url.replace('?','%3F').replace('&','%26')}")
         ns   = {"atom": "http://www.w3.org/2005/Atom"}
         root = ET.fromstring(raw)
         count = 0
@@ -79,7 +79,7 @@ def fetch_reddit():
             author = (author_el.text or "").strip()       if author_el else ""
             if "AutoModerator" in author: continue
             link      = link_el.get("href","").strip() if link_el else ""
-            sub_label = cat_el.get("label","r/?")      if cat_el  else "r/?"
+            sub_label = (cat_el.get("label") or cat_el.get("term","r/?")) if cat_el else "r/?"
             dt        = parse_date((date_el.text or "") if date_el else "")
             items.append({"title": title, "url": link, "source_type": "reddit",
                           "source_label": sub_label, "virality": max(10,90-count*10),
@@ -106,7 +106,7 @@ def fetch_rss(feeds, source_type):
                 link_el  = entry.find("link")
                 date_el  = entry.find("pubDate") or entry.find("atom:published", ns)
                 title = (title_el.text or "").strip()[:120]
-                link  = (link_el.text or link_el.get("href","")).strip() if link_el else ""
+                link  = (getattr(link_el,"text",None) or (link_el.get("href","") if link_el else "") or getattr(entry.find("guid"),"text","") or "").strip()
                 dt    = parse_date((date_el.text or "") if date_el else "")
                 items.append({"title": title, "url": link, "source_type": source_type,
                               "source_label": name, "virality": None, "score": None,
