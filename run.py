@@ -15,7 +15,7 @@ DASHBOARD_URL = "https://manuelcasadeicom-bot.github.io/fitness-dashboard/"
 # ── SOURCES ───────────────────────────────────────────────────────────────────
 REDDIT_SUBS = [
     "Biohackers", "bodybuilding", "crossfit", "Fitness",
-    "intermittentfasting", "ketoscience", "longevity", "nutrition", "xxfitness
+    "intermittentfasting", "ketoscience", "longevity", "nutrition", "xxfitness"
 ]
 
 SUBSTACK_FEEDS = [
