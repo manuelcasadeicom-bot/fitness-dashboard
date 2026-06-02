@@ -15,7 +15,7 @@ DASHBOARD_URL = "https://manuelcasadeicom-bot.github.io/fitness-dashboard/"
 # ── SOURCES ───────────────────────────────────────────────────────────────────
 REDDIT_SUBS = [
     "Biohackers", "bodybuilding", "crossfit", "Fitness",
-    "intermittentfasting", "ketoscience", "longevity", "nutrition", "xxfitness"
+    "intermittentfasting", "ketoscience", "longevity", "nutrition", "xxfitness
 ]
 
 SUBSTACK_FEEDS = [
@@ -64,7 +64,7 @@ def fetch_reddit():
     url = f"https://www.reddit.com/r/{combined}/top/.rss?t=day&limit=30"
     items = []
     try:
-        raw  = curl_get(url)
+        raw  = curl_get(f"{PROXY}?url={url}")
         ns   = {"atom": "http://www.w3.org/2005/Atom"}
         root = ET.fromstring(raw)
         count = 0
