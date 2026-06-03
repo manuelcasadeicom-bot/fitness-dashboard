@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# v2
 """Daily Fitness Intelligence & Economics Dashboard generator."""
 
 import json, base64, urllib.request, urllib.parse, subprocess, os
