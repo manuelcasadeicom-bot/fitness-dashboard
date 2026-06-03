@@ -66,36 +66,49 @@ def get_text(el):
     return ("".join(el.itertext()) or "").strip()
 
 def fetch_reddit():
-    combined = "+".join(REDDIT_SUBS)
-    reddit_url = f"https://www.reddit.com/r/{combined}/top/.rss?t=day&limit=30"
-    # Route through proxy: GitHub Actions IPs are blocked by Reddit directly
-    proxy_url = f"{PROXY}?url={urllib.parse.quote(reddit_url, safe='')}"
+    """Fetch Reddit top posts via JSON API for individual subreddits."""
     items = []
-    try:
-        raw  = curl_get(proxy_url)
-        ns   = {"atom": "http://www.w3.org/2005/Atom"}
-        root = ET.fromstring(raw)
-        count = 0
-        for entry in root.findall("atom:entry", ns):
-            if count >= 8: break
-            title_el  = entry.find("atom:title", ns)
-            link_el   = entry.find("atom:link", ns)
-            date_el   = entry.find("atom:published", ns)
-            author_el = entry.find("atom:author/atom:name", ns)
-            cat_el    = entry.find("atom:category", ns)
-            title  = get_text(title_el)[:120]
-            author = get_text(author_el)
-            if "AutoModerator" in author: continue
-            link      = link_el.get("href","").strip() if link_el else ""
-            sub_label = cat_el.get("label") or cat_el.get("term","r/?") if cat_el else "r/?"
-            dt        = parse_date(get_text(date_el))
-            items.append({"title": title, "url": link, "source_type": "reddit",
-                          "source_label": sub_label, "virality": max(10,90-count*10),
-                          "score": None, "comments": None,
-                          "date": dt.isoformat() if dt else NOW.isoformat()})
-            count += 1
-    except Exception as e:
-        print(f"  Reddit RSS: {e}")
+    count_total = 0
+    for sub in REDDIT_SUBS:
+        if count_total >= 8:
+            break
+        url = f"https://www.reddit.com/r/{sub}/top.json?t=day&limit=3&raw_json=1"
+        raw = ""
+        # Try proxy first, then direct
+        for label, fetch_url in [("proxy", f"{PROXY}?url={urllib.parse.quote(url, safe='')}"),
+                                  ("direct", url)]:
+            try:
+                raw = curl_get(fetch_url)
+                if raw.strip().startswith("{"):
+                    break  # valid JSON, stop trying
+                print(f"  Reddit {sub} ({label}): non-JSON response, trying next")
+                raw = ""
+            except Exception as e:
+                print(f"  Reddit {sub} ({label}): {e}")
+        if not raw:
+            continue
+        try:
+            data  = json.loads(raw)
+            posts = data.get("data", {}).get("children", [])
+            print(f"  Reddit r/{sub}: {len(posts)} posts")
+            for post_data in posts[:2]:
+                if count_total >= 8:
+                    break
+                post   = post_data.get("data", {})
+                author = post.get("author", "")
+                if author in ("AutoModerator", "[deleted]", ""):
+                    continue
+                title  = post.get("title", "")[:120]
+                link   = "https://www.reddit.com" + post.get("permalink", "").rstrip("/")
+                sub_lbl = post.get("subreddit_name_prefixed", f"r/{sub}")
+                items.append({"title": title, "url": link, "source_type": "reddit",
+                              "source_label": sub_lbl,
+                              "virality": max(10, 90 - count_total * 10),
+                              "score": None, "comments": None,
+                              "date": NOW.isoformat()})
+                count_total += 1
+        except Exception as e:
+            print(f"  Reddit {sub} parse: {e}")
     return items
 
 def fetch_rss(feeds, source_type):
