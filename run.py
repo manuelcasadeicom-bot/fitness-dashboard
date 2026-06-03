@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Daily Fitness Intelligence & Economics Dashboard generator."""
 
-import json, base64, urllib.request, subprocess, os
+import json, base64, urllib.request, urllib.parse, subprocess, os
 from datetime import datetime, timezone, timedelta
 from xml.etree import ElementTree as ET
 
@@ -59,12 +59,20 @@ def fmt_num(n):
     if not n: return "0"
     return f"{n/1000:.1f}k".replace(".0k","k") if n >= 1000 else str(n)
 
+def get_text(el):
+    """Safely extract text from an XML element, handling CDATA and child nodes."""
+    if el is None:
+        return ""
+    return ("".join(el.itertext()) or "").strip()
+
 def fetch_reddit():
     combined = "+".join(REDDIT_SUBS)
-    url = f"https://www.reddit.com/r/{combined}/top/.rss?t=day&limit=30"
+    reddit_url = f"https://www.reddit.com/r/{combined}/top/.rss?t=day&limit=30"
+    # Route through proxy: GitHub Actions IPs are blocked by Reddit directly
+    proxy_url = f"{PROXY}?url={urllib.parse.quote(reddit_url, safe='')}"
     items = []
     try:
-        raw  = curl_get(f"{PROXY}?url={url.replace('+','%2B').replace('?','%3F').replace('&','%26')}")
+        raw  = curl_get(proxy_url)
         ns   = {"atom": "http://www.w3.org/2005/Atom"}
         root = ET.fromstring(raw)
         count = 0
@@ -75,12 +83,12 @@ def fetch_reddit():
             date_el   = entry.find("atom:published", ns)
             author_el = entry.find("atom:author/atom:name", ns)
             cat_el    = entry.find("atom:category", ns)
-            title  = (title_el.text  or "").strip()[:120] if title_el  else ""
-            author = (author_el.text or "").strip()       if author_el else ""
+            title  = get_text(title_el)[:120]
+            author = get_text(author_el)
             if "AutoModerator" in author: continue
             link      = link_el.get("href","").strip() if link_el else ""
-            sub_label = (cat_el.get("label") or cat_el.get("term","r/?")) if cat_el else "r/?"
-            dt        = parse_date((date_el.text or "") if date_el else "")
+            sub_label = cat_el.get("label") or cat_el.get("term","r/?") if cat_el else "r/?"
+            dt        = parse_date(get_text(date_el))
             items.append({"title": title, "url": link, "source_type": "reddit",
                           "source_label": sub_label, "virality": max(10,90-count*10),
                           "score": None, "comments": None,
@@ -95,7 +103,7 @@ def fetch_rss(feeds, source_type):
     ns = {"atom": "http://www.w3.org/2005/Atom"}
     for url, name in feeds:
         try:
-            raw  = curl_get(f"{PROXY}?url={url}")
+            raw  = curl_get(f"{PROXY}?url={urllib.parse.quote(url, safe='')}")
             root = ET.fromstring(raw)
             channel = root.find("channel")
             entries = channel.findall("item") if channel else root.findall("atom:entry", ns)
@@ -105,9 +113,9 @@ def fetch_rss(feeds, source_type):
                 title_el = entry.find("title")
                 link_el  = entry.find("link")
                 date_el  = entry.find("pubDate") or entry.find("atom:published", ns)
-                title = (title_el.text or "").strip()[:120]
-                link  = (getattr(link_el,"text",None) or (link_el.get("href","") if link_el else "") or getattr(entry.find("guid"),"text","") or "").strip()
-                dt    = parse_date((date_el.text or "") if date_el else "")
+                title = get_text(title_el)[:120]
+                link  = (get_text(link_el) or (link_el.get("href","") if link_el else "")).strip()
+                dt    = parse_date(get_text(date_el))
                 items.append({"title": title, "url": link, "source_type": source_type,
                               "source_label": name, "virality": None, "score": None,
                               "comments": None, "date": dt.isoformat() if dt else NOW.isoformat()})
@@ -120,7 +128,8 @@ def fetch_economist():
     items = []
     for url, section in ECONOMIST_FEEDS:
         try:
-            raw     = curl_get(f"{PROXY}?url={url}")
+            # Fetch directly — proxy blocks Economist paywalled feeds
+            raw     = curl_get(url)
             root    = ET.fromstring(raw)
             channel = root.find("channel")
             count   = 0
@@ -129,9 +138,9 @@ def fetch_economist():
                 title_el = entry.find("title")
                 link_el  = entry.find("link")
                 date_el  = entry.find("pubDate")
-                title = (title_el.text or "").strip()[:120] if title_el else ""
-                link  = (link_el.text  or "").strip()       if link_el  else ""
-                dt    = parse_date((date_el.text or "") if date_el else "")
+                title = get_text(title_el)[:120]
+                link  = get_text(link_el).strip() if link_el else ""
+                dt    = parse_date(get_text(date_el))
                 items.append({"title": title, "url": link, "source_type": "economist",
                               "source_label": f"Economist · {section}", "virality": None,
                               "score": None, "comments": None,
