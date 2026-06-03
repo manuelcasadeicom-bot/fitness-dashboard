@@ -66,49 +66,37 @@ def get_text(el):
     return ("".join(el.itertext()) or "").strip()
 
 def fetch_reddit():
-    """Fetch Reddit top posts via JSON API for individual subreddits."""
+    """Fetch Reddit top posts via rss2json.com gateway (bypasses Reddit bot blocking)."""
     items = []
     count_total = 0
     for sub in REDDIT_SUBS:
         if count_total >= 8:
             break
-        url = f"https://www.reddit.com/r/{sub}/top.json?t=day&limit=3&raw_json=1"
-        raw = ""
-        # Try proxy first, then direct
-        for label, fetch_url in [("proxy", f"{PROXY}?url={urllib.parse.quote(url, safe='')}"),
-                                  ("direct", url)]:
-            try:
-                raw = curl_get(fetch_url)
-                if raw.strip().startswith("{"):
-                    break  # valid JSON, stop trying
-                print(f"  Reddit {sub} ({label}): non-JSON response, trying next")
-                raw = ""
-            except Exception as e:
-                print(f"  Reddit {sub} ({label}): {e}")
-        if not raw:
-            continue
+        rss_url = f"https://www.reddit.com/r/{sub}/top.rss?t=day&limit=3"
+        api_url = f"https://api.rss2json.com/v1/api.json?rss_url={urllib.parse.quote(rss_url, safe='')}"
         try:
-            data  = json.loads(raw)
-            posts = data.get("data", {}).get("children", [])
+            raw  = curl_get(api_url)
+            data = json.loads(raw)
+            if data.get("status") != "ok":
+                print(f"  Reddit r/{sub}: rss2json status={data.get('status')}")
+                continue
+            posts = data.get("items", [])
             print(f"  Reddit r/{sub}: {len(posts)} posts")
-            for post_data in posts[:2]:
+            for post in posts[:2]:
                 if count_total >= 8:
                     break
-                post   = post_data.get("data", {})
-                author = post.get("author", "")
-                if author in ("AutoModerator", "[deleted]", ""):
+                title = (post.get("title") or "")[:120]
+                link  = post.get("link") or post.get("guid") or ""
+                if not title:
                     continue
-                title  = post.get("title", "")[:120]
-                link   = "https://www.reddit.com" + post.get("permalink", "").rstrip("/")
-                sub_lbl = post.get("subreddit_name_prefixed", f"r/{sub}")
                 items.append({"title": title, "url": link, "source_type": "reddit",
-                              "source_label": sub_lbl,
+                              "source_label": f"r/{sub}",
                               "virality": max(10, 90 - count_total * 10),
                               "score": None, "comments": None,
                               "date": NOW.isoformat()})
                 count_total += 1
         except Exception as e:
-            print(f"  Reddit {sub} parse: {e}")
+            print(f"  Reddit r/{sub}: {e}")
     return items
 
 def fetch_rss(feeds, source_type):
