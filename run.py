@@ -138,9 +138,12 @@ def fetch_economist():
                 if count >= 3: break
                 title_el = entry.find("title")
                 link_el  = entry.find("link")
+                guid_el  = entry.find("guid")
                 date_el  = entry.find("pubDate")
                 title = get_text(title_el)[:120]
-                link  = get_text(link_el).strip() if link_el else ""
+                link  = (get_text(link_el) or get_text(guid_el) or "").strip()
+                if not link.startswith("http"):
+                    link = get_text(guid_el) if guid_el is not None else ""
                 dt    = parse_date(get_text(date_el))
                 items.append({"title": title, "url": link, "source_type": "economist",
                               "source_label": f"Economist · {section}", "virality": None,
