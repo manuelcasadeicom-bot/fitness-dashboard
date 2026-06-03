@@ -16,6 +16,21 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Debug Reddit connectivity
+        run: |
+          echo "=== Reddit direct (www) ==="
+          curl -sL --max-time 10 -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
+            "https://www.reddit.com/r/Fitness/top.json?t=day&limit=1&raw_json=1" | head -c 400
+          echo ""
+          echo "=== Reddit via proxy ==="
+          curl -sL --max-time 10 \
+            "https://reddit-proxy.manuelcasadei-com.workers.dev?url=https%3A%2F%2Fwww.reddit.com%2Fr%2FFitness%2Ftop.json%3Ft%3Dday%26limit%3D1%26raw_json%3D1" | head -c 400
+          echo ""
+          echo "=== Reddit old.reddit.com ==="
+          curl -sL --max-time 10 -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
+            "https://old.reddit.com/r/Fitness/top.json?t=day&limit=1&raw_json=1" | head -c 400
+          echo ""
+
       - name: Run report
         env:
           TG_TOKEN:   ${{ secrets.TG_TOKEN }}
