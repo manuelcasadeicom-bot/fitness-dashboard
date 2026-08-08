@@ -12,9 +12,11 @@ GH_REPO       = "manuelcasadeicom-bot/fitness-dashboard"
 DASHBOARD_URL = "https://manuelcasadeicom-bot.github.io/fitness-dashboard/"
 
 SUBSTACK_SOURCES = [
-    ("https://staycuriousmetabolism.substack.com", "Stay Curious Metabolism"),
-    ("https://neuroathletics.substack.com",        "Neuro Athletics"),
-    ("https://chrismasterjohnphd.substack.com",    "Chris Masterjohn PhD"),
+    ("https://staycuriousmetabolism.substack.com", "Stay Curious Metabolism", "fitness"),
+    ("https://neuroathletics.substack.com",        "Neuro Athletics",         "fitness"),
+    ("https://chrismasterjohnphd.substack.com",    "Chris Masterjohn PhD",    "fitness"),
+    ("https://thomisticinstitute.substack.com",    "Thomistic Institute",     "teologia"),
+    ("https://itsallaboutlogic.substack.com",      "It's All About Logic",    "logica"),
 ]
 
 UA    = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -90,7 +92,7 @@ def fetch_rss(base_url, name, n):
 
 def fetch_substack(n=N_PER_SOURCE):
     all_items = []
-    for base_url, name in SUBSTACK_SOURCES:
+    for base_url, name, category in SUBSTACK_SOURCES:
         print(f"  [{name}]")
         source_items = []
         for fetcher, label in [(fetch_json, "JSON"), (fetch_rss, "RSS")]:
@@ -106,6 +108,7 @@ def fetch_substack(n=N_PER_SOURCE):
             for item in source_items:
                 dt = item.get("date")
                 item["date"] = dt.isoformat() if isinstance(dt, datetime) else NOW.isoformat()
+                item["category"] = category
             all_items.extend(source_items)
         else:
             print(f"    -> FAILED all methods for {name}")
@@ -142,13 +145,24 @@ def send_telegram(all_items):
             seen.add(item["source_label"])
 
     lines = [
-        "📊 FITNESS & LONGEVITY INTELLIGENCE",
+        "📊 INTELLIGENCE DAILY",
         f"📅 {NOW.strftime('%d %b %Y')} — 07:00 AM", "",
-        "📰 ULTIMI ARTICOLI SUBSTACK", "━━━━━━━━━━━━━━"
     ]
-    for i, item in enumerate(tg_items, 1):
-        t = item["title"][:75] + ("…" if len(item["title"]) > 75 else "")
-        lines += [f"{i}. [{item['source_label']}] {t}", f"   {item['url']}", ""]
+    sections = [
+        ("fitness",  "🏋️ FITNESS & LONGEVITY"),
+        ("teologia", "✝️ TEOLOGIA"),
+        ("logica",   "🧠 LOGICA"),
+    ]
+    counter = 1
+    for cat_key, cat_label in sections:
+        cat_items = [i for i in tg_items if i.get("category") == cat_key]
+        if not cat_items:
+            continue
+        lines += [cat_label, "━━━━━━━━━━━━━━"]
+        for item in cat_items:
+            t = item["title"][:75] + ("…" if len(item["title"]) > 75 else "")
+            lines += [f"{counter}. [{item['source_label']}] {t}", f"   {item['url']}", ""]
+            counter += 1
     lines += ["━━━━━━━━━━━━━━", f"📲 Full dashboard: {DASHBOARD_URL}"]
     result = subprocess.run(
         ["curl", "-s", "-X", "POST",
