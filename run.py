@@ -68,11 +68,9 @@ def fetch_json(base_url, name, n):
             result.append({"title": title, "url": link, "date": dt, "source_label": name, "source_type": "substack"})
     return result
 
-def fetch_rss(base_url, name, n):
-    """Fallback: RSS feed — returns list of up to n items."""
+def _parse_rss_raw(raw, base_url, name, n):
+    """Parse RSS/Atom XML string; shared by proxy and direct fetchers."""
     ns = {"atom": "http://www.w3.org/2005/Atom"}
-    raw = proxy_get(f"{base_url}/feed")
-    print(f"    RSS feed: {len(raw)}b | {raw[:100]!r}")
     if not raw.strip(): return []
     root = ET.fromstring(raw)
     ch = root.find("channel")
@@ -90,12 +88,24 @@ def fetch_rss(base_url, name, n):
             result.append({"title": title, "url": link, "date": parse_date(date_str), "source_label": name, "source_type": "substack"})
     return result
 
+def fetch_rss(base_url, name, n):
+    """Fallback: RSS feed via proxy — returns list of up to n items."""
+    raw = proxy_get(f"{base_url}/feed")
+    print(f"    RSS feed: {len(raw)}b | {raw[:100]!r}")
+    return _parse_rss_raw(raw, base_url, name, n)
+
+def fetch_rss_direct(base_url, name, n):
+    """Last resort: RSS feed fetched directly (no proxy)."""
+    raw = curl_get(f"{base_url}/feed")
+    print(f"    RSS direct: {len(raw)}b | {raw[:100]!r}")
+    return _parse_rss_raw(raw, base_url, name, n)
+
 def fetch_substack(n=N_PER_SOURCE):
     all_items = []
     for base_url, name, category in SUBSTACK_SOURCES:
         print(f"  [{name}]")
         source_items = []
-        for fetcher, label in [(fetch_json, "JSON"), (fetch_rss, "RSS")]:
+        for fetcher, label in [(fetch_json, "JSON"), (fetch_rss, "RSS"), (fetch_rss_direct, "RSS-direct")]:
             try:
                 source_items = fetcher(base_url, name, n)
                 if source_items:
