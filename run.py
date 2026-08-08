@@ -47,73 +47,71 @@ def parse_date(s):
         except: pass
     return None
 
-def fetch_one_json(base_url, name):
-    """Try Substack JSON API: /api/v1/posts/?limit=1"""
-    api = f"{base_url}/api/v1/posts/?limit=1"
+N_PER_SOURCE = 3  # articles per source for the dashboard
+
+def fetch_json(base_url, name, n):
+    """Try Substack JSON API: returns list of up to n items."""
+    api = f"{base_url}/api/v1/posts/?limit={n}"
     raw = proxy_get(api)
-    print(f"    JSON api: {len(raw)}b | {raw[:150]!r}")
-    if not raw.strip():
-        return None
+    print(f"    JSON api: {len(raw)}b | {raw[:100]!r}")
+    if not raw.strip(): return []
     data = json.loads(raw)
     posts = data if isinstance(data, list) else data.get("posts", [])
-    if not posts:
-        return None
-    p = posts[0]
-    title = (p.get("title") or "").strip()[:120]
-    link  = p.get("canonical_url") or f"{base_url}/p/{p.get('slug', '')}"
-    dt    = parse_date(p.get("post_date") or "")
-    return {"title": title, "url": link, "date": dt, "source_label": name, "source_type": "substack"}
+    result = []
+    for p in posts[:n]:
+        title = (p.get("title") or "").strip()[:120]
+        link  = p.get("canonical_url") or f"{base_url}/p/{p.get('slug', '')}"
+        dt    = parse_date(p.get("post_date") or "")
+        if title:
+            result.append({"title": title, "url": link, "date": dt, "source_label": name, "source_type": "substack"})
+    return result
 
-def fetch_one_rss(base_url, name):
-    """Fallback: RSS feed /feed"""
+def fetch_rss(base_url, name, n):
+    """Fallback: RSS feed â returns list of up to n items."""
     ns = {"atom": "http://www.w3.org/2005/Atom"}
-    feed_url = f"{base_url}/feed"
-    raw = proxy_get(feed_url)
-    print(f"    RSS feed: {len(raw)}b | {raw[:150]!r}")
-    if not raw.strip():
-        return None
+    raw = proxy_get(f"{base_url}/feed")
+    print(f"    RSS feed: {len(raw)}b | {raw[:100]!r}")
+    if not raw.strip(): return []
     root = ET.fromstring(raw)
     ch = root.find("channel")
     entries = (ch.findall("item") if ch is not None else []) or root.findall("atom:entry", ns)
     print(f"    RSS entries: {len(entries)}")
-    if not entries:
-        return None
-    e = entries[0]
-    title_el = e.find("title")
-    link_el  = e.find("link")
-    date_el  = e.find("pubDate") or e.find("atom:published", ns)
-    title = "".join(title_el.itertext()).strip()[:120] if title_el is not None else ""
-    link  = ("".join(link_el.itertext()).strip() or link_el.get("href", "")) if link_el is not None else ""
-    date_str = "".join(date_el.itertext()).strip() if date_el is not None else ""
-    print(f"    RSS parsed: title={title[:60]!r} link={link[:60]!r}")
-    return {"title": title, "url": link, "date": parse_date(date_str), "source_label": name, "source_type": "substack"}
+    result = []
+    for e in entries[:n]:
+        title_el = e.find("title")
+        link_el  = e.find("link")
+        date_el  = e.find("pubDate") or e.find("atom:published", ns)
+        title = "".join(title_el.itertext()).strip()[:120] if title_el is not None else ""
+        link  = ("".join(link_el.itertext()).strip() or link_el.get("href", "")) if link_el is not None else ""
+        date_str = "".join(date_el.itertext()).strip() if date_el is not None else ""
+        if title:
+            result.append({"title": title, "url": link, "date": parse_date(date_str), "source_label": name, "source_type": "substack"})
+    return result
 
-def fetch_substack():
-    items = []
+def fetch_substack(n=N_PER_SOURCE):
+    all_items = []
     for base_url, name in SUBSTACK_SOURCES:
         print(f"  [{name}]")
-        item = None
-        for fetcher, label in [(fetch_one_json, "JSON"), (fetch_one_rss, "RSS")]:
+        source_items = []
+        for fetcher, label in [(fetch_json, "JSON"), (fetch_rss, "RSS")]:
             try:
-                item = fetcher(base_url, name)
-                if item and item.get("title"):
-                    print(f"    -> OK via {label}: {item['title'][:60]!r}")
+                source_items = fetcher(base_url, name, n)
+                if source_items:
+                    print(f"    -> OK via {label}: {len(source_items)} items, first: {source_items[0]['title'][:50]!r}")
                     break
-                else:
-                    print(f"    -> {label}: empty result, trying next")
-                    item = None
+                print(f"    -> {label}: empty, trying next")
             except Exception as e:
                 print(f"    -> {label} error: {type(e).__name__}: {e}")
-                item = None
-        if item:
-            dt = item.get("date")
-            item["date"] = dt.isoformat() if isinstance(dt, datetime) else NOW.isoformat()
-            items.append(item)
+        if source_items:
+            for item in source_items:
+                dt = item.get("date")
+                item["date"] = dt.isoformat() if isinstance(dt, datetime) else NOW.isoformat()
+            all_items.extend(source_items)
         else:
             print(f"    -> FAILED all methods for {name}")
-    return items
+    return all_items
 
-HTML = r"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Fitness &amp; Longevity Intelligence</title><script src="https://cdn.tailwindcss.com"></script><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}.card{transition:box-shadow .15s;}.card:hover{box-shadow:0 4px 20px rgba(0,0,0,.1);}</style></head><body class="bg-gray-50 min-h-screen"><div class="bg-white border-b border-gray-200 sticky top-0 z-10"><div class="max-w-2xl mx-auto px-4 py-3"><h1 class="text-lg font-bold text-gray-900">📊 Fitness &amp; Longevity Intelligence</h1><p class="text-xs text-gray-500">Last updated: __DATE__</p></div></div><div class="max-w-2xl mx-auto px-4 py-4" id="cc"></div><div class="max-w-2xl mx-auto px-4 pb-8 text-center"><p class="text-xs text-gray-400">Updated daily at 7:00 AM · WellBeingSm Intelligence</p></div><script>const D=__DATA__;document.getElementById('cc').innerHTML=D.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(item=>`<div class="card bg-white rounded-xl p-4 mb-3 border border-gray-100 shadow-sm"><div class="flex items-start justify-between gap-2"><div class="flex-1 min-w-0"><span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-500 text-white">${item.source_label}</span><h3 class="font-semibold text-gray-900 text-sm leading-snug mt-2">${item.title}</h3><p class="text-xs text-gray-400 mt-1">${new Date(item.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</p></div><a href="${item.url}" target="_blank" rel="noopener" class="shrink-0 text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-gray-700 mt-0.5 ml-2">Read →</a></div></div>`).join('');</script></body></html>"""
+HTML = r"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Fitness &amp; Longevity Intelligence</title><script src="https://cdn.tailwindcss.com"></script><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}.card{transition:box-shadow .15s;}.card:hover{box-shadow:0 4px 20px rgba(0,0,0,.1);}</style></head><body class="bg-gray-50 min-h-screen"><div class="bg-white border-b border-gray-200 sticky top-0 z-10"><div class="max-w-2xl mx-auto px-4 py-3"><h1 class="text-lg font-bold text-gray-900">ð Fitness &amp; Longevity Intelligence</h1><p class="text-xs text-gray-500">Last updated: __DATE__</p></div></div><div class="max-w-2xl mx-auto px-4 py-4" id="cc"></div><div class="max-w-2xl mx-auto px-4 pb-8 text-center"><p class="text-xs text-gray-400">Updated daily at 7:00 AM Â· WellBeingSm Intelligence</p></div><script>const D=__DATA__;document.getElementById('cc').innerHTML=D.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(item=>`<div class="card bg-white rounded-xl p-4 mb-3 border border-gray-100 shadow-sm"><div class="flex items-start justify-between gap-2"><div class="flex-1 min-w-0"><span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-500 text-white">${item.source_label}</span><h3 class="font-semibold text-gray-900 text-sm leading-snug mt-2">${item.title}</h3><p class="text-xs text-gray-400 mt-1">${new Date(item.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</p></div><a href="${item.url}" target="_blank" rel="noopener" class="shrink-0 text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-gray-700 mt-0.5 ml-2">Read â</a></div></div>`).join('');</script></body></html>"""
 
 def generate_html(items, date_str):
     return HTML.replace("__DATE__", date_str).replace("__DATA__", json.dumps(items, ensure_ascii=False))
@@ -134,16 +132,24 @@ def upload_to_github(html):
     with urllib.request.urlopen(req2) as r:
         return json.loads(r.read()).get("commit", {}).get("sha", "")[:12]
 
-def send_telegram(items):
+def send_telegram(all_items):
+    # One article per source (the most recent = first in list)
+    seen = set()
+    tg_items = []
+    for item in all_items:
+        if item["source_label"] not in seen:
+            tg_items.append(item)
+            seen.add(item["source_label"])
+
     lines = [
-        "📊 FITNESS & LONGEVITY INTELLIGENCE",
-        f"📅 {NOW.strftime('%d %b %Y')} — 07:00 AM", "",
-        "📰 ULTIMI ARTICOLI SUBSTACK", "━━━━━━━━━━━━━━"
+        "ð FITNESS & LONGEVITY INTELLIGENCE",
+        f"ð {NOW.strftime('%d %b %Y')} â 07:00 AM", "",
+        "ð° ULTIMI ARTICOLI SUBSTACK", "ââââââââââââââ"
     ]
-    for i, item in enumerate(items, 1):
-        t = item["title"][:75] + ("…" if len(item["title"]) > 75 else "")
+    for i, item in enumerate(tg_items, 1):
+        t = item["title"][:75] + ("â¦" if len(item["title"]) > 75 else "")
         lines += [f"{i}. [{item['source_label']}] {t}", f"   {item['url']}", ""]
-    lines += ["━━━━━━━━━━━━━━", f"📲 Full dashboard: {DASHBOARD_URL}"]
+    lines += ["ââââââââââââââ", f"ð² Full dashboard: {DASHBOARD_URL}"]
     result = subprocess.run(
         ["curl", "-s", "-X", "POST",
          f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
@@ -152,14 +158,14 @@ def send_telegram(items):
          "--data-urlencode", "disable_web_page_preview=true"],
         capture_output=True, text=True)
     resp = json.loads(result.stdout)
-    print(f"  Telegram ok={resp.get('ok')} err={resp.get('description','')}")
+    print(f"  Telegram ok={resp.get('ok')} tg_items={len(tg_items)} err={resp.get('description','')}")
     return resp.get("ok", False)
 
 if __name__ == "__main__":
     print("=== Fetching Substack ===")
-    items = fetch_substack()
-    print(f"=== Total: {len(items)} articles ===")
-    html = generate_html(items, NOW.strftime("%d %b %Y — %H:%M UTC"))
+    items = fetch_substack(n=N_PER_SOURCE)
+    print(f"=== Total: {len(items)} articles (dashboard) ===")
+    html = generate_html(items, NOW.strftime("%d %b %Y â %H:%M UTC"))
     print("=== Uploading dashboard ===")
     commit = upload_to_github(html)
     print(f"  Commit: {commit}")
