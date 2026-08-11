@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Daily Fitness & Longevity Intelligence Dashboard generator."""
 
-import json, base64, urllib.request, urllib.parse, subprocess, os
+import json, base64, urllib.request, urllib.parse, subprocess, os, time
 from datetime import datetime, timezone
 from xml.etree import ElementTree as ET
 
@@ -100,20 +100,33 @@ def fetch_rss_direct(base_url, name, n):
     print(f"    RSS direct: {len(raw)}b | {raw[:100]!r}")
     return _parse_rss_raw(raw, base_url, name, n)
 
+RETRY_DELAYS = [4, 8]  # seconds to wait before each retry of the same method
+
 def fetch_substack(n=N_PER_SOURCE):
     all_items = []
-    for base_url, name, category in SUBSTACK_SOURCES:
+    for i, (base_url, name, category) in enumerate(SUBSTACK_SOURCES):
+        if i > 0:
+            time.sleep(3)  # pause between sources to avoid rate limiting
         print(f"  [{name}]")
         source_items = []
         for fetcher, label in [(fetch_json, "JSON"), (fetch_rss, "RSS"), (fetch_rss_direct, "RSS-direct")]:
-            try:
-                source_items = fetcher(base_url, name, n)
-                if source_items:
-                    print(f"    -> OK via {label}: {len(source_items)} items, first: {source_items[0]['title'][:50]!r}")
-                    break
-                print(f"    -> {label}: empty, trying next")
-            except Exception as e:
-                print(f"    -> {label} error: {type(e).__name__}: {e}")
+            # Try each fetcher up to 1+len(RETRY_DELAYS) times with backoff
+            for attempt, delay in enumerate([0] + RETRY_DELAYS):
+                if delay:
+                    print(f"    -> {label} retry {attempt} in {delay}s...")
+                    time.sleep(delay)
+                try:
+                    source_items = fetcher(base_url, name, n)
+                    if source_items:
+                        print(f"    -> OK via {label} (attempt {attempt+1}): {len(source_items)} items, first: {source_items[0]['title'][:50]!r}")
+                        break
+                    print(f"    -> {label} attempt {attempt+1}: empty")
+                except Exception as e:
+                    print(f"    -> {label} attempt {attempt+1} error: {type(e).__name__}: {e}")
+            if source_items:
+                break
+            if label != "RSS-direct":
+                time.sleep(3)  # pause between fallback methods
         if source_items:
             for item in source_items:
                 dt = item.get("date")
