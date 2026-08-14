@@ -49,17 +49,17 @@ def parse_date(s):
         except: pass
     return None
 
-def strip_html(s):
+def strip_html(s, limit=1200):
     """Strip HTML tags, collapse whitespace, and truncate for display."""
     text = re.sub(r'<[^>]+>', ' ', s or '')
-    text = re.sub(r'\s+', ' ', text).strip()[:600]
+    text = re.sub(r'\s+', ' ', text).strip()[:limit]
     return text.replace('`', "'").replace('${', '')
 
 def translate_to_it(text):
     """Translate text to Italian using Google Translate free endpoint."""
     if not text.strip(): return text
     try:
-        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=it&dt=t&q={urllib.parse.quote(text[:500])}"
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=it&dt=t&q={urllib.parse.quote(text[:900])}"
         r = subprocess.run(["curl", "-sL", "--max-time", "10", url], capture_output=True, text=True)
         data = json.loads(r.stdout)
         return "".join(part[0] for part in data[0] if part[0])
@@ -82,9 +82,15 @@ def fetch_json(base_url, name, n):
         title = (p.get("title") or "").strip()[:120]
         link  = p.get("canonical_url") or f"{base_url}/p/{p.get('slug', '')}"
         dt    = parse_date(p.get("post_date") or "")
-        body = strip_html(p.get("truncated_body_text") or "")
-        subtitle = strip_html(p.get("subtitle") or p.get("description") or "")
-        desc_raw = body if len(body) > len(subtitle) else subtitle
+        body = strip_html(p.get("truncated_body_text") or "", limit=900)
+        subtitle = strip_html(p.get("subtitle") or p.get("description") or "", limit=300)
+        # Combine subtitle (hook/thesis) + body (detail) for actionable summary
+        if subtitle and body and subtitle.lower() not in body.lower():
+            desc_raw = subtitle + " — " + body
+        elif body:
+            desc_raw = body
+        else:
+            desc_raw = subtitle
         desc = translate_to_it(desc_raw)
         if title:
             result.append({"title": title, "url": link, "date": dt, "source_label": name, "source_type": "substack", "description": desc})
@@ -107,7 +113,7 @@ def _parse_rss_raw(raw, base_url, name, n):
         title = "".join(title_el.itertext()).strip()[:120] if title_el is not None else ""
         link  = ("".join(link_el.itertext()).strip() or link_el.get("href", "")) if link_el is not None else ""
         date_str = "".join(date_el.itertext()).strip() if date_el is not None else ""
-        desc_raw = strip_html("".join(desc_el.itertext()).strip() if desc_el is not None else "")
+        desc_raw = strip_html("".join(desc_el.itertext()).strip() if desc_el is not None else "", limit=1000)
         desc = translate_to_it(desc_raw)
         if title:
             result.append({"title": title, "url": link, "date": parse_date(date_str), "source_label": name, "source_type": "substack", "description": desc})
@@ -162,7 +168,7 @@ def fetch_substack(n=N_PER_SOURCE):
             print(f"    -> FAILED all methods for {name}")
     return all_items
 
-HTML = r"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Fitness &amp; Longevity Intelligence</title><script src="https://cdn.tailwindcss.com"></script><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}.card{transition:box-shadow .15s;}.card:hover{box-shadow:0 4px 20px rgba(0,0,0,.1);}</style></head><body class="bg-gray-50 min-h-screen"><div class="bg-white border-b border-gray-200 sticky top-0 z-10"><div class="max-w-2xl mx-auto px-4 py-3"><h1 class="text-lg font-bold text-gray-900">📊 Fitness &amp; Longevity Intelligence</h1><p class="text-xs text-gray-500">Last updated: __DATE__</p></div></div><div class="max-w-2xl mx-auto px-4 py-4" id="cc"></div><div class="max-w-2xl mx-auto px-4 pb-8 text-center"><p class="text-xs text-gray-400">Updated daily at 7:00 AM · WellBeingSm Intelligence</p></div><script>const D=__DATA__;const CO={fitness:0,teologia:1,logica:2};const CL={fitness:'🏋️ FITNESS & LONGEVITY',teologia:'✝️ TEOLOGIA',logica:'🧠 LOGICA'};const CC={fitness:'#f97316',teologia:'#7c3aed',logica:'#2563eb'};D.sort((a,b)=>{const d=(CO[a.category]??99)-(CO[b.category]??99);return d||new Date(b.date)-new Date(a.date);});let html='',cur=null;for(const item of D){if(item.category!==cur){cur=item.category;html+=`<div style="margin:20px 0 8px;padding-bottom:8px;border-bottom:2px solid #e5e7eb"><h2 style="font-size:14px;font-weight:700;color:#374151">${CL[cur]??cur}</h2></div>`;}const desc=item.description?`<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:#9ca3af;list-style:none;outline:none">&#9656; Mostra riassunto</summary><p style="font-size:13px;color:#4b5563;margin-top:6px;line-height:1.65">${item.description}</p></details>`:'';html+=`<div class="card bg-white rounded-xl p-4 mb-3 border border-gray-100 shadow-sm"><div class="flex items-start justify-between gap-2"><div class="flex-1 min-w-0"><span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:9999px;background:${CC[item.category]??'#6b7280'};color:white">${item.source_label}</span><h3 class="font-semibold text-gray-900 text-sm leading-snug mt-2">${item.title}</h3><p class="text-xs text-gray-400 mt-1">${new Date(item.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</p>${desc}</div><a href="${item.url}" target="_blank" rel="noopener" class="shrink-0 text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-gray-700 mt-0.5 ml-2">Read →</a></div></div>`;}document.getElementById('cc').innerHTML=html;</script></body></html>"""
+HTML = r"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Fitness &amp; Longevity Intelligence</title><script src="https://cdn.tailwindcss.com"></script><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}.card{transition:box-shadow .15s;}.card:hover{box-shadow:0 4px 20px rgba(0,0,0,.1);}</style></head><body class="bg-gray-50 min-h-screen"><div class="bg-white border-b border-gray-200 sticky top-0 z-10"><div class="max-w-2xl mx-auto px-4 py-3"><h1 class="text-lg font-bold text-gray-900">📊 Fitness &amp; Longevity Intelligence</h1><p class="text-xs text-gray-500">Last updated: __DATE__</p></div></div><div class="max-w-2xl mx-auto px-4 py-4" id="cc"></div><div class="max-w-2xl mx-auto px-4 pb-8 text-center"><p class="text-xs text-gray-400">Updated daily at 7:00 AM · WellBeingSm Intelligence</p></div><script>const D=__DATA__;const CO={fitness:0,teologia:1,logica:2};const CL={fitness:'🏋️ FITNESS & LONGEVITY',teologia:'✝️ TEOLOGIA',logica:'🧠 LOGICA'};const CC={fitness:'#f97316',teologia:'#7c3aed',logica:'#2563eb'};D.sort((a,b)=>{const d=(CO[a.category]??99)-(CO[b.category]??99);return d||new Date(b.date)-new Date(a.date);});let html='',cur=null;for(const item of D){if(item.category!==cur){cur=item.category;html+=`<div style="margin:20px 0 8px;padding-bottom:8px;border-bottom:2px solid #e5e7eb"><h2 style="font-size:14px;font-weight:700;color:#374151">${CL[cur]??cur}</h2></div>`;}const desc=item.description?`<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:#9ca3af;list-style:none;outline:none">&#9656; Di cosa parla</summary><p style="font-size:13px;color:#374151;margin-top:8px;line-height:1.75;border-left:3px solid #e5e7eb;padding-left:10px">${item.description}</p></details>`:'';html+=`<div class="card bg-white rounded-xl p-4 mb-3 border border-gray-100 shadow-sm"><div class="flex items-start justify-between gap-2"><div class="flex-1 min-w-0"><span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:9999px;background:${CC[item.category]??'#6b7280'};color:white">${item.source_label}</span><h3 class="font-semibold text-gray-900 text-sm leading-snug mt-2">${item.title}</h3><p class="text-xs text-gray-400 mt-1">${new Date(item.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</p>${desc}</div><a href="${item.url}" target="_blank" rel="noopener" class="shrink-0 text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-gray-700 mt-0.5 ml-2">Read →</a></div></div>`;}document.getElementById('cc').innerHTML=html;</script></body></html>"""
 
 def generate_html(items, date_str):
     return HTML.replace("__DATE__", date_str).replace("__DATA__", json.dumps(items, ensure_ascii=False))
