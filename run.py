@@ -10,6 +10,7 @@ TG_CHAT_ID    = os.environ["TG_CHAT_ID"]
 GH_TOKEN      = os.environ["GH_TOKEN"]
 GH_REPO       = "manuelcasadeicom-bot/fitness-dashboard"
 DASHBOARD_URL = "https://manuelcasadeicom-bot.github.io/fitness-dashboard/"
+SUBSTACK_COOKIE = os.environ.get("SUBSTACK_COOKIE", "")
 
 SUBSTACK_SOURCES = [
     ("https://staycuriousmetabolism.substack.com", "Stay Curious Metabolism", "fitness"),
@@ -25,8 +26,10 @@ PROXY = "https://reddit-proxy.manuelcasadei-com.workers.dev"
 
 def curl_get(url):
     cmd = ["curl", "-sL", "--max-time", "25", "-A", UA,
-           "-H", "Accept: text/html,application/xhtml+xml,application/xml,application/json;q=0.9,*/*;q=0.8",
-           url]
+           "-H", "Accept: text/html,application/xhtml+xml,application/xml,application/json;q=0.9,*/*;q=0.8"]
+    if SUBSTACK_COOKIE and "substack.com" in url:
+        cmd += ["-H", f"Cookie: substack.sid={SUBSTACK_COOKIE}"]
+    cmd.append(url)
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         print(f"    curl error {r.returncode}: {r.stderr[:80]}")
