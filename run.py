@@ -76,9 +76,13 @@ def fetch_article_conclusion(url, max_chars=900):
         return ""
     try:
         time.sleep(1)
-        raw = proxy_get(url)
-        if not raw or len(raw) < 2000:
+        # If cookie is available, go direct (proxy can't forward auth)
+        if SUBSTACK_COOKIE and "substack.com" in url:
             raw = curl_get(url)
+        else:
+            raw = proxy_get(url)
+            if not raw or len(raw) < 2000:
+                raw = curl_get(url)
         if not raw or len(raw) < 500:
             return ""
         raw = re.sub(r'<script[\s\S]*?</script>', '', raw, flags=re.IGNORECASE)
