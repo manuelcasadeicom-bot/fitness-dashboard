@@ -67,6 +67,33 @@ def translate_to_it(text):
         print(f"    translate error: {e}")
         return text
 
+def fetch_article_conclusion(url, max_chars=900):
+    """Fetch full article page and extract first + last paragraphs (thesis + conclusions)."""
+    if not url:
+        return ""
+    try:
+        time.sleep(1)
+        raw = proxy_get(url)
+        if not raw or len(raw) < 2000:
+            raw = curl_get(url)
+        if not raw or len(raw) < 500:
+            return ""
+        raw = re.sub(r'<script[\s\S]*?</script>', '', raw, flags=re.IGNORECASE)
+        raw = re.sub(r'<style[\s\S]*?</style>', '', raw, flags=re.IGNORECASE)
+        paras = re.findall(r'<p[^>]*?>([\s\S]*?)</p>', raw, re.IGNORECASE)
+        texts = [strip_html(p, limit=400).strip() for p in paras]
+        texts = [t for t in texts if len(t) > 80]  # skip nav/short fragments
+        if not texts:
+            return ""
+        if len(texts) <= 4:
+            return ' '.join(texts)[:max_chars]
+        # Thesis (first para) + recommendations (last 2 paras)
+        result = texts[0] + ' … ' + ' '.join(texts[-2:])
+        return result[:max_chars]
+    except Exception as e:
+        print(f"    article conclusion error: {e}")
+        return ""
+
 N_PER_SOURCE = 3  # articles per source for the dashboard
 
 def fetch_json(base_url, name, n):
@@ -82,15 +109,14 @@ def fetch_json(base_url, name, n):
         title = (p.get("title") or "").strip()[:120]
         link  = p.get("canonical_url") or f"{base_url}/p/{p.get('slug', '')}"
         dt    = parse_date(p.get("post_date") or "")
-        body = strip_html(p.get("truncated_body_text") or "", limit=900)
         subtitle = strip_html(p.get("subtitle") or p.get("description") or "", limit=300)
-        # Combine subtitle (hook/thesis) + body (detail) for actionable summary
-        if subtitle and body and subtitle.lower() not in body.lower():
-            desc_raw = subtitle + " — " + body
-        elif body:
-            desc_raw = body
+        # Fetch full article for conclusion paragraphs (thesis + recommendations)
+        article_body = fetch_article_conclusion(link)
+        if article_body:
+            desc_raw = (subtitle + " — " + article_body) if subtitle and subtitle.lower() not in article_body.lower() else article_body
         else:
-            desc_raw = subtitle
+            body = strip_html(p.get("truncated_body_text") or "", limit=900)
+            desc_raw = (subtitle + " — " + body) if subtitle and body and subtitle.lower() not in body.lower() else (body or subtitle)
         desc = translate_to_it(desc_raw)
         if title:
             result.append({"title": title, "url": link, "date": dt, "source_label": name, "source_type": "substack", "description": desc})
@@ -113,7 +139,9 @@ def _parse_rss_raw(raw, base_url, name, n):
         title = "".join(title_el.itertext()).strip()[:120] if title_el is not None else ""
         link  = ("".join(link_el.itertext()).strip() or link_el.get("href", "")) if link_el is not None else ""
         date_str = "".join(date_el.itertext()).strip() if date_el is not None else ""
-        desc_raw = strip_html("".join(desc_el.itertext()).strip() if desc_el is not None else "", limit=1000)
+        api_desc = strip_html("".join(desc_el.itertext()).strip() if desc_el is not None else "", limit=600)
+        article_body = fetch_article_conclusion(link)
+        desc_raw = article_body if article_body else api_desc
         desc = translate_to_it(desc_raw)
         if title:
             result.append({"title": title, "url": link, "date": parse_date(date_str), "source_label": name, "source_type": "substack", "description": desc})
