@@ -62,16 +62,16 @@ def translate_to_it(text):
     """Translate text to Italian using Google Translate free endpoint."""
     if not text.strip(): return text
     try:
-        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=it&dt=t&q={urllib.parse.quote(text[:900])}"
-        r = subprocess.run(["curl", "-sL", "--max-time", "10", url], capture_output=True, text=True)
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=it&dt=t&q={urllib.parse.quote(text[:1800])}"
+        r = subprocess.run(["curl", "-sL", "--max-time", "15", url], capture_output=True, text=True)
         data = json.loads(r.stdout)
         return "".join(part[0] for part in data[0] if part[0])
     except Exception as e:
         print(f"    translate error: {e}")
         return text
 
-def fetch_article_conclusion(url, max_chars=900):
-    """Fetch full article page and extract first + last paragraphs (thesis + conclusions)."""
+def fetch_article_conclusion(url, max_chars=2000):
+    """Fetch full article page and extract meaningful paragraphs (thesis + body + conclusions)."""
     if not url:
         return ""
     try:
@@ -88,14 +88,24 @@ def fetch_article_conclusion(url, max_chars=900):
         raw = re.sub(r'<script[\s\S]*?</script>', '', raw, flags=re.IGNORECASE)
         raw = re.sub(r'<style[\s\S]*?</style>', '', raw, flags=re.IGNORECASE)
         paras = re.findall(r'<p[^>]*?>([\s\S]*?)</p>', raw, re.IGNORECASE)
-        texts = [strip_html(p, limit=400).strip() for p in paras]
-        texts = [t for t in texts if len(t) > 80]  # skip nav/short fragments
+        texts = [strip_html(p, limit=500).strip() for p in paras]
+        texts = [t for t in texts if len(t) > 60]  # skip nav/short fragments
+        # Remove duplicate/near-duplicate lines (paywall upsell often repeats)
+        seen_starts = set()
+        deduped = []
+        for t in texts:
+            key = t[:40].lower()
+            if key not in seen_starts:
+                seen_starts.add(key)
+                deduped.append(t)
+        texts = deduped
+        print(f"    article conclusion: {len(texts)} paras from {len(raw)}b page")
         if not texts:
             return ""
-        if len(texts) <= 4:
+        if len(texts) <= 6:
             return ' '.join(texts)[:max_chars]
-        # Thesis (first para) + recommendations (last 2 paras)
-        result = texts[0] + ' … ' + ' '.join(texts[-2:])
+        # First 2 paras (thesis/intro) + last 3 paras (conclusions/recommendations)
+        result = ' '.join(texts[:2]) + ' … ' + ' '.join(texts[-3:])
         return result[:max_chars]
     except Exception as e:
         print(f"    article conclusion error: {e}")
@@ -106,7 +116,11 @@ N_PER_SOURCE = 3  # articles per source for the dashboard
 def fetch_json(base_url, name, n):
     """Try Substack JSON API: returns list of up to n items."""
     api = f"{base_url}/api/v1/posts/?limit={n}"
-    raw = proxy_get(api)
+    # Use cookie directly when available — unlocks body_html for subscribed publications
+    if SUBSTACK_COOKIE:
+        raw = curl_get(api)
+    else:
+        raw = proxy_get(api)
     print(f"    JSON api: {len(raw)}b | {raw[:100]!r}")
     if not raw.strip(): return []
     data = json.loads(raw)
@@ -116,13 +130,15 @@ def fetch_json(base_url, name, n):
         title = (p.get("title") or "").strip()[:120]
         link  = p.get("canonical_url") or f"{base_url}/p/{p.get('slug', '')}"
         dt    = parse_date(p.get("post_date") or "")
-        subtitle = strip_html(p.get("subtitle") or p.get("description") or "", limit=300)
+        subtitle = strip_html(p.get("subtitle") or p.get("description") or "", limit=400)
         # Fetch full article for conclusion paragraphs (thesis + recommendations)
         article_body = fetch_article_conclusion(link)
         if article_body:
             desc_raw = (subtitle + " — " + article_body) if subtitle and subtitle.lower() not in article_body.lower() else article_body
         else:
-            body = strip_html(p.get("truncated_body_text") or "", limit=900)
+            # Fallback: use body_html (full content if authenticated) or truncated_body_text
+            body_raw = p.get("body_html") or p.get("truncated_body_text") or ""
+            body = strip_html(body_raw, limit=2000)
             desc_raw = (subtitle + " — " + body) if subtitle and body and subtitle.lower() not in body.lower() else (body or subtitle)
         desc = translate_to_it(desc_raw)
         if title:
@@ -132,6 +148,7 @@ def fetch_json(base_url, name, n):
 def _parse_rss_raw(raw, base_url, name, n):
     """Parse RSS/Atom XML string; shared by proxy and direct fetchers."""
     ns = {"atom": "http://www.w3.org/2005/Atom"}
+    ns_content = "http://purl.org/rss/1.0/modules/content/"
     if not raw.strip(): return []
     root = ET.fromstring(raw)
     ch = root.find("channel")
@@ -139,14 +156,20 @@ def _parse_rss_raw(raw, base_url, name, n):
     print(f"    RSS entries: {len(entries)}")
     result = []
     for e in entries[:n]:
-        title_el = e.find("title")
-        link_el  = e.find("link")
-        date_el  = e.find("pubDate") or e.find("atom:published", ns)
-        desc_el  = e.find("description")
-        title = "".join(title_el.itertext()).strip()[:120] if title_el is not None else ""
-        link  = ("".join(link_el.itertext()).strip() or link_el.get("href", "")) if link_el is not None else ""
+        title_el   = e.find("title")
+        link_el    = e.find("link")
+        date_el    = e.find("pubDate") or e.find("atom:published", ns)
+        desc_el    = e.find("description")
+        content_el = e.find(f"{{{ns_content}}}encoded")  # content:encoded — full preview HTML
+        title    = "".join(title_el.itertext()).strip()[:120] if title_el is not None else ""
+        link     = ("".join(link_el.itertext()).strip() or link_el.get("href", "")) if link_el is not None else ""
         date_str = "".join(date_el.itertext()).strip() if date_el is not None else ""
-        api_desc = strip_html("".join(desc_el.itertext()).strip() if desc_el is not None else "", limit=600)
+        # content:encoded has the full preview (several paragraphs); description is just a teaser
+        if content_el is not None and content_el.text:
+            api_desc = strip_html(content_el.text, limit=2000)
+            print(f"    content:encoded {len(content_el.text)}b → {len(api_desc)} chars")
+        else:
+            api_desc = strip_html("".join(desc_el.itertext()).strip() if desc_el is not None else "", limit=1000)
         article_body = fetch_article_conclusion(link)
         desc_raw = article_body if article_body else api_desc
         desc = translate_to_it(desc_raw)
