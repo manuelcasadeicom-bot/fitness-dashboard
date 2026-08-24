@@ -113,7 +113,7 @@ def fetch_article_conclusion(url, max_chars=2000):
         if not texts:
             return ""
         if len(texts) <= 6:
-            return ' '.join(texts)[:max_chars]
+            return trim_to_sentence(' '.join(texts), max_chars)
         # First 2 paras (thesis/intro) + last 3 paras (conclusions/recommendations)
         result = ' '.join(texts[:2]) + ' … ' + ' '.join(texts[-3:])
         return trim_to_sentence(result, max_chars)
