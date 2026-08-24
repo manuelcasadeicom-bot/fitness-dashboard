@@ -78,7 +78,7 @@ def translate_to_it(text):
         return "".join(part[0] for part in data[0] if part[0])
     except Exception as e:
         print(f"    translate error: {e}")
-        return text
+        return trim_to_sentence(text, 1800)
 
 def fetch_article_conclusion(url, max_chars=2000):
     """Fetch full article page and extract meaningful paragraphs (thesis + body + conclusions)."""
