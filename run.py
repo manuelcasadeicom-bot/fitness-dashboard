@@ -201,6 +201,44 @@ def fetch_rss_direct(base_url, name, n):
 
 RETRY_DELAYS = [4, 8]  # seconds to wait before each retry of the same method
 
+def _cache_path(name):
+    return f"cache/{name.lower().replace(' ', '_')}.json"
+
+def load_cached_items(name):
+    """Load last-known-good items from GitHub repo cache."""
+    api_url = f"https://api.github.com/repos/{GH_REPO}/contents/{_cache_path(name)}"
+    headers = {"Authorization": f"token {GH_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    try:
+        req = urllib.request.Request(api_url, headers=headers)
+        with urllib.request.urlopen(req) as r:
+            data = json.loads(r.read())
+            return json.loads(base64.b64decode(data["content"]).decode())
+    except Exception as e:
+        print(f"    cache load error: {e}")
+        return []
+
+def save_cached_items(name, items):
+    """Save items to GitHub repo cache for future fallback use."""
+    api_url = f"https://api.github.com/repos/{GH_REPO}/contents/{_cache_path(name)}"
+    headers = {"Authorization": f"token {GH_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    content_b64 = base64.b64encode(json.dumps(items, ensure_ascii=False).encode()).decode()
+    sha = ""
+    try:
+        req = urllib.request.Request(api_url, headers=headers)
+        with urllib.request.urlopen(req) as r:
+            sha = json.loads(r.read()).get("sha", "")
+    except:
+        pass
+    payload = {"message": f"cache: {name}", "content": content_b64}
+    if sha:
+        payload["sha"] = sha
+    try:
+        req2 = urllib.request.Request(api_url, data=json.dumps(payload).encode(), method="PUT", headers=headers)
+        with urllib.request.urlopen(req2) as r:
+            print(f"    cache saved for {name}")
+    except Exception as e:
+        print(f"    cache save error: {e}")
+
 def fetch_substack(n=N_PER_SOURCE):
     all_items = []
     for i, (base_url, name, category) in enumerate(SUBSTACK_SOURCES):
@@ -231,9 +269,16 @@ def fetch_substack(n=N_PER_SOURCE):
                 dt = item.get("date")
                 item["date"] = dt.isoformat() if isinstance(dt, datetime) else NOW.isoformat()
                 item["category"] = category
+            save_cached_items(name, source_items)
             all_items.extend(source_items)
         else:
-            print(f"    -> FAILED all methods for {name}")
+            print(f"    -> FAILED all methods for {name}; trying cache")
+            cached = load_cached_items(name)
+            if cached:
+                print(f"    -> cache hit: {len(cached)} items for {name}")
+                all_items.extend(cached)
+            else:
+                print(f"    -> no cache for {name}")
     return all_items
 
 HTML = r"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Fitness &amp; Longevity Intelligence</title><script src="https://cdn.tailwindcss.com"></script><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}.card{transition:box-shadow .15s;}.card:hover{box-shadow:0 4px 20px rgba(0,0,0,.1);}</style></head><body class="bg-gray-50 min-h-screen"><div class="bg-white border-b border-gray-200 sticky top-0 z-10"><div class="max-w-2xl mx-auto px-4 py-3"><h1 class="text-lg font-bold text-gray-900">📊 Fitness &amp; Longevity Intelligence</h1><p class="text-xs text-gray-500">Last updated: __DATE__</p></div></div><div class="max-w-2xl mx-auto px-4 py-4" id="cc"></div><div class="max-w-2xl mx-auto px-4 pb-8 text-center"><p class="text-xs text-gray-400">Updated daily at 7:00 AM · WellBeingSm Intelligence</p></div><script>const D=__DATA__;const CO={fitness:0,teologia:1};const CL={fitness:'🏋️ FITNESS & LONGEVITY',teologia:'✝️ TEOLOGIA'};const CC={fitness:'#f97316',teologia:'#7c3aed'};D.sort((a,b)=>{const d=(CO[a.category]??99)-(CO[b.category]??99);return d||new Date(b.date)-new Date(a.date);});let html='',cur=null;for(const item of D){if(item.category!==cur){cur=item.category;html+=`<div style="margin:20px 0 8px;padding-bottom:8px;border-bottom:2px solid #e5e7eb"><h2 style="font-size:14px;font-weight:700;color:#374151">${CL[cur]??cur}</h2></div>`;}const desc=item.description?`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;color:#9ca3af;list-style:none;outline:none">&#9656; Di cosa parla</summary><p style="font-size:15px;color:#374151;margin-top:10px;line-height:1.7;border-left:3px solid #e5e7eb;padding-left:12px">${item.description}</p></details>`:'';html+=`<div class="card bg-white rounded-xl p-4 mb-3 border border-gray-100 shadow-sm"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px"><span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:9999px;background:${CC[item.category]??'#6b7280'};color:white">${item.source_label}</span><a href="${item.url}" target="_blank" rel="noopener" style="font-size:12px;font-weight:600;background:#111;color:white;padding:4px 12px;border-radius:8px;text-decoration:none;white-space:nowrap">Leggi →</a></div><h3 style="font-size:16px;font-weight:600;color:#111;line-height:1.4;margin:0 0 4px 0">${item.title}</h3><p style="font-size:12px;color:#9ca3af;margin:0 0 0 0">${new Date(item.date).toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric'})}</p>${desc}</div>`;}document.getElementById('cc').innerHTML=html;</script></body></html>"""
