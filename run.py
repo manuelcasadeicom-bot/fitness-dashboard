@@ -13,10 +13,10 @@ DASHBOARD_URL = "https://manuelcasadeicom-bot.github.io/fitness-dashboard/"
 SUBSTACK_COOKIE = os.environ.get("SUBSTACK_COOKIE", "")
 
 SUBSTACK_SOURCES = [
+    ("https://thomisticinstitute.substack.com",    "Thomistic Institute",     "teologia"),
     ("https://staycuriousmetabolism.substack.com", "Stay Curious Metabolism", "fitness"),
     ("https://neuroathletics.substack.com",        "Neuro Athletics",         "fitness"),
     ("https://chrismasterjohnphd.substack.com",    "Chris Masterjohn PhD",    "fitness"),
-    ("https://thomisticinstitute.substack.com",    "Thomistic Institute",     "teologia"),
 ]
 
 UA    = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
