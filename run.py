@@ -333,12 +333,15 @@ def upload_to_github(html):
 
 def send_telegram(all_items):
     # One article per source (the most recent = first in list)
-    seen = set()
+    # Default: 1 article per source; some sources get more (most recent first)
+    TG_PER_SOURCE = {"LifeSiteNews": 3}
+    counts = {}
     tg_items = []
     for item in all_items:
-        if item["source_label"] not in seen:
+        src = item["source_label"]
+        if counts.get(src, 0) < TG_PER_SOURCE.get(src, 1):
             tg_items.append(item)
-            seen.add(item["source_label"])
+            counts[src] = counts.get(src, 0) + 1
 
     lines = [
         "📊 INTELLIGENCE DAILY",
