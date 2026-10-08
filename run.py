@@ -4,6 +4,7 @@
 import json, base64, urllib.request, urllib.parse, subprocess, os, time, re
 from datetime import datetime, timezone
 from xml.etree import ElementTree as ET
+from html import unescape as html_unescape
 
 TG_TOKEN      = os.environ["TG_TOKEN"]
 TG_CHAT_ID    = os.environ["TG_CHAT_ID"]
@@ -16,6 +17,11 @@ SUBSTACK_SOURCES = [
     ("https://thomisticinstitute.substack.com",    "Thomistic Institute",     "teologia"),
     ("https://staycuriousmetabolism.substack.com", "Stay Curious Metabolism", "fitness"),
     ("https://neuroathletics.substack.com",        "Neuro Athletics",         "fitness"),
+]
+
+# Generic (non-Substack) RSS feeds: (feed_url, label, category)
+RSS_SOURCES = [
+    ("https://www.lifesitenews.com/topics/faith/feed/", "LifeSiteNews", "teologia"),
 ]
 
 UA    = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -64,6 +70,7 @@ def trim_to_sentence(text, max_chars):
 def strip_html(s, limit=1200):
     """Strip HTML tags, collapse whitespace, and truncate for display."""
     text = re.sub(r'<[^>]+>', ' ', s or '')
+    text = html_unescape(text)
     text = re.sub(r'\s+', ' ', text).strip()[:limit]
     return text.replace('`', "'").replace('${', '')
 
@@ -78,6 +85,9 @@ def translate_to_it(text):
     except Exception as e:
         print(f"    translate error: {e}")
         return trim_to_sentence(text, 1800)
+
+# Boilerplate paragraphs to drop (newsletter sign-ups, paywall upsells, etc.)
+JUNK_RE = re.compile(r"mailing list|unsubscribe|subscribe now|reader-supported publication|free or paid subscriber|sign up for|featured image|all rights reserved", re.I)
 
 def fetch_article_conclusion(url, max_chars=2000):
     """Fetch full article page and extract meaningful paragraphs (thesis + body + conclusions)."""
@@ -98,7 +108,7 @@ def fetch_article_conclusion(url, max_chars=2000):
         raw = re.sub(r'<style[\s\S]*?</style>', '', raw, flags=re.IGNORECASE)
         paras = re.findall(r'<p[^>]*?>([\s\S]*?)</p>', raw, re.IGNORECASE)
         texts = [strip_html(p, limit=500).strip() for p in paras]
-        texts = [t for t in texts if len(t) > 60]  # skip nav/short fragments
+        texts = [t for t in texts if len(t) > 60 and not JUNK_RE.search(t)]  # skip nav/short fragments and boilerplate
         # Remove duplicate/near-duplicate lines (paywall upsell often repeats)
         seen_starts = set()
         deduped = []
@@ -167,7 +177,9 @@ def _parse_rss_raw(raw, base_url, name, n):
     for e in entries[:n]:
         title_el   = e.find("title")
         link_el    = e.find("link")
-        date_el    = e.find("pubDate") or e.find("atom:published", ns)
+        date_el    = e.find("pubDate")
+        if date_el is None:
+            date_el = e.find("atom:published", ns)
         desc_el    = e.find("description")
         content_el = e.find(f"{{{ns_content}}}encoded")  # content:encoded — full preview HTML
         title    = "".join(title_el.itertext()).strip()[:120] if title_el is not None else ""
@@ -197,6 +209,18 @@ def fetch_rss_direct(base_url, name, n):
     raw = curl_get(f"{base_url}/feed")
     print(f"    RSS direct: {len(raw)}b | {raw[:100]!r}")
     return _parse_rss_raw(raw, base_url, name, n)
+
+def fetch_feed_direct(feed_url, name, n):
+    """Generic RSS source: feed fetched directly."""
+    raw = curl_get(feed_url)
+    print(f"    feed direct: {len(raw)}b")
+    return _parse_rss_raw(raw, feed_url, name, n)
+
+def fetch_feed_proxy(feed_url, name, n):
+    """Generic RSS source: feed fetched via proxy."""
+    raw = proxy_get(feed_url)
+    print(f"    feed proxy: {len(raw)}b")
+    return _parse_rss_raw(raw, feed_url, name, n)
 
 RETRY_DELAYS = [4, 8]  # seconds to wait before each retry of the same method
 
@@ -240,12 +264,18 @@ def save_cached_items(name, items):
 
 def fetch_substack(n=N_PER_SOURCE):
     all_items = []
-    for i, (base_url, name, category) in enumerate(SUBSTACK_SOURCES):
+    sources = [(u, nm, c, "substack") for u, nm, c in SUBSTACK_SOURCES] + \
+              [(u, nm, c, "rss") for u, nm, c in RSS_SOURCES]
+    for i, (base_url, name, category, kind) in enumerate(sources):
         if i > 0:
             time.sleep(3)  # pause between sources to avoid rate limiting
         print(f"  [{name}]")
         source_items = []
-        for fetcher, label in [(fetch_json, "JSON"), (fetch_rss, "RSS"), (fetch_rss_direct, "RSS-direct")]:
+        if kind == "rss":
+            fetchers = [(fetch_feed_direct, "FEED"), (fetch_feed_proxy, "FEED-proxy")]
+        else:
+            fetchers = [(fetch_json, "JSON"), (fetch_rss, "RSS"), (fetch_rss_direct, "RSS-direct")]
+        for fetcher, label in fetchers:
             # Try each fetcher up to 1+len(RETRY_DELAYS) times with backoff
             for attempt, delay in enumerate([0] + RETRY_DELAYS):
                 if delay:
@@ -261,7 +291,7 @@ def fetch_substack(n=N_PER_SOURCE):
                     print(f"    -> {label} attempt {attempt+1} error: {type(e).__name__}: {e}")
             if source_items:
                 break
-            if label != "RSS-direct":
+            if fetcher is not fetchers[-1][0]:
                 time.sleep(3)  # pause between fallback methods
         if source_items:
             for item in source_items:
