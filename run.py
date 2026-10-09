@@ -173,8 +173,25 @@ def _parse_rss_raw(raw, base_url, name, n):
     ch = root.find("channel")
     entries = (ch.findall("item") if ch is not None else []) or root.findall("atom:entry", ns)
     print(f"    RSS entries: {len(entries)}")
+    # De-duplicate entries with the same title (e.g. LifeSiteNews posts the same piece as
+    # /blogs/ and /episodes/); keep first position, prefer the non-video version.
+    def _key(el):
+        t = el.find("title")
+        return re.sub(r"\W+", " ", "".join(t.itertext()) if t is not None else "").strip().lower()
+    def _link(el):
+        l = el.find("link")
+        return ("".join(l.itertext()).strip() or l.get("href", "")) if l is not None else ""
+    unique, pos = [], {}
+    for e in entries:
+        k = _key(e)
+        if k in pos:
+            if "/episodes/" in _link(unique[pos[k]]) and "/episodes/" not in _link(e):
+                unique[pos[k]] = e
+            continue
+        pos[k] = len(unique)
+        unique.append(e)
     result = []
-    for e in entries[:n]:
+    for e in unique[:n]:
         title_el   = e.find("title")
         link_el    = e.find("link")
         date_el    = e.find("pubDate")
